@@ -8,7 +8,7 @@ from PyQt5.QtCore import Qt
 
 from models.document import DrawingDocument
 from models.tools import (SelectionTool, LineTool, RectangleTool, CircleTool,
-                         FreehandTool, SpiralTool, SineCurveTool, ColorTool)
+                         FreehandTool, SpiralTool, SineCurveTool, ColorTool, EraserTool)
 from views.canvas import Canvas
 from views.panels import ToolPanel, ColorPanel, LayerPanel
 
@@ -42,7 +42,8 @@ class MainWindow(QMainWindow):
             "circle": CircleTool(self.document),
             "freehand": FreehandTool(self.document),
             "spiral": SpiralTool(self.document),
-            "sine": SineCurveTool(self.document)
+            "sine": SineCurveTool(self.document),
+            "eraser": EraserTool(self.document)
         }
         
         # 设置颜色工具

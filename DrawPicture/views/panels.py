@@ -33,6 +33,7 @@ class ToolPanel(QWidget):
         self.freehand_btn = self._create_tool_button("自由绘制", "freehand")
         self.spiral_btn = self._create_tool_button("螺线", "spiral")
         self.sine_btn = self._create_tool_button("正弦曲线", "sine")
+        self.eraser_btn = self._create_tool_button("橡皮擦", "eraser")  # 添加橡皮擦按钮
         
         # 将按钮添加到布局
         tools_layout.addWidget(self.selection_btn)
@@ -42,6 +43,7 @@ class ToolPanel(QWidget):
         tools_layout.addWidget(self.freehand_btn)
         tools_layout.addWidget(self.spiral_btn)
         tools_layout.addWidget(self.sine_btn)
+        tools_layout.addWidget(self.eraser_btn)  # 添加橡皮擦按钮到布局
         tools_layout.addStretch(1)
         
         tools_group.setLayout(tools_layout)
@@ -65,7 +67,8 @@ class ToolPanel(QWidget):
         """工具按钮点击处理"""
         # 清除所有按钮的选中状态
         for btn in [self.selection_btn, self.line_btn, self.rectangle_btn, 
-                  self.circle_btn, self.freehand_btn, self.spiral_btn, self.sine_btn]:
+                  self.circle_btn, self.freehand_btn, self.spiral_btn, self.sine_btn,
+                  self.eraser_btn]:  # 添加橡皮擦按钮
             btn.setChecked(False)
             
         # 设置当前工具
@@ -86,6 +89,8 @@ class ToolPanel(QWidget):
             self.spiral_btn.setChecked(True)
         elif tool_name == "sine":
             self.sine_btn.setChecked(True)
+        elif tool_name == "eraser":
+            self.eraser_btn.setChecked(True)  # 设置橡皮擦按钮选中状态
             
         # 发送信号
         self.tool_selected.emit(tool_name)
@@ -393,4 +398,4 @@ class LayerPanel(QWidget):
             layer_index = current_item.data(Qt.UserRole)
             if layer_index > 0:  # 不删除默认图层
                 self.document.remove_layer(layer_index)
-                self.update_layer_list() 
+                self.update_layer_list()

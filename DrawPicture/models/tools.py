@@ -2,7 +2,7 @@
 # -*- coding: utf-8 -*-
 
 from PyQt5.QtCore import Qt, QRectF, QPointF
-from PyQt5.QtGui import QPen, QBrush, QColor, QCursor, QPixmap
+from PyQt5.QtGui import QPen, QBrush, QColor, QCursor, QPixmap, QPainterPath, QPainter
 import math
 
 from models.shapes import Line, Rectangle, Circle, ArchimedeanSpiral, SineCurve, Freehand
@@ -296,6 +296,101 @@ class SineCurveTool(DrawingTool):
             self.current_shape = None
 
 
+class EraserTool(DrawingTool):
+    """橡皮擦工具"""
+    def __init__(self, document):
+        super().__init__(document)
+        self.name = "橡皮擦"
+        self.current_shape = None
+        self.last_pos = None
+        self.eraser_width = 20  # 橡皮擦宽度
+        
+        # 创建橡皮擦光标
+        cursor_size = 32
+        pixmap = QPixmap(cursor_size, cursor_size)
+        pixmap.fill(Qt.transparent)  # 设置透明背景
+        
+        painter = QPainter(pixmap)
+        painter.setRenderHint(QPainter.Antialiasing)
+        
+        # 绘制橡皮擦图标
+        # 主体部分（灰色矩形）
+        painter.setPen(QPen(Qt.gray, 1))
+        painter.setBrush(QBrush(Qt.lightGray))
+        painter.drawRect(8, 2, 20, 16)
+        
+        # 底部部分（深灰色）
+        painter.setPen(QPen(Qt.darkGray, 1))
+        painter.setBrush(QBrush(Qt.darkGray))
+        painter.drawRect(8, 18, 20, 4)
+        
+        # 高光效果
+        painter.setPen(QPen(Qt.white, 1))
+        painter.drawLine(9, 3, 27, 3)
+        
+        painter.end()
+        
+        # 设置光标热点为橡皮擦的左下角
+        self.cursor = QCursor(pixmap, 8, 22)
+        
+    def mouse_press(self, event):
+        if event.button() == Qt.LeftButton:
+            self.is_drawing = True
+            self.last_pos = event.pos()
+            self.current_shape = Freehand()
+            self.current_shape.add_point(event.pos())
+            # 设置白色画笔
+            pen = QPen(QColor(255, 255, 255))
+            pen.setWidth(self.eraser_width)  # 使用较粗的线宽
+            pen.setCapStyle(Qt.RoundCap)  # 设置圆形笔帽，使擦除更平滑
+            pen.setJoinStyle(Qt.RoundJoin)  # 设置圆形连接点
+            self.current_shape.set_pen(pen)
+            # 设置白色填充
+            brush = QBrush(QColor(255, 255, 255))
+            self.current_shape.set_brush(brush)
+            # 将图形添加到最顶层
+            max_z = max([shape.z_value for shape in self.document.shapes]) if self.document.shapes else 0
+            self.current_shape.z_value = max_z + 1
+            self.document.add_shape(self.current_shape)
+        
+    def mouse_move(self, event):
+        if self.is_drawing and self.current_shape:
+            # 添加新的点
+            current_pos = event.pos()
+            # 如果与上一个点距离太远，创建新的形状以避免锯齿
+            if self.last_pos and (current_pos - self.last_pos).manhattanLength() > self.eraser_width * 2:
+                # 结束当前形状
+                self.current_shape = None
+                # 创建新的形状
+                self.current_shape = Freehand()
+                self.current_shape.add_point(self.last_pos)
+                self.current_shape.add_point(current_pos)
+                # 设置白色画笔
+                pen = QPen(QColor(255, 255, 255))
+                pen.setWidth(self.eraser_width)
+                pen.setCapStyle(Qt.RoundCap)
+                pen.setJoinStyle(Qt.RoundJoin)
+                self.current_shape.set_pen(pen)
+                # 设置白色填充
+                brush = QBrush(QColor(255, 255, 255))
+                self.current_shape.set_brush(brush)
+                # 将图形添加到最顶层
+                max_z = max([shape.z_value for shape in self.document.shapes]) if self.document.shapes else 0
+                self.current_shape.z_value = max_z + 1
+                self.document.add_shape(self.current_shape)
+            else:
+                self.current_shape.add_point(current_pos)
+            
+            self.last_pos = current_pos
+            self.document.document_changed.emit()
+    
+    def mouse_release(self, event):
+        if event.button() == Qt.LeftButton and self.is_drawing:
+            self.is_drawing = False
+            self.current_shape = None
+            self.last_pos = None
+
+
 class ColorTool:
     """颜色工具类，用于管理线条颜色和填充颜色"""
     def __init__(self):
@@ -347,4 +442,4 @@ class ColorTool:
         
     def set_line_style(self, style):
         """设置线型"""
-        self.line_style = style 
+        self.line_style = style
