@@ -1,0 +1,415 @@
+#!/usr/bin/env python3
+# -*- coding: utf-8 -*-
+
+from PyQt5.QtCore import Qt, QRectF, QPointF
+from PyQt5.QtGui import QPainter, QPen, QBrush, QColor, QPainterPath
+import numpy as np
+import math
+
+class Shape:
+    """基础图形类"""
+    def __init__(self):
+        self.pen = QPen(Qt.black, 2, Qt.SolidLine)
+        self.brush = QBrush(Qt.transparent)
+        self.position = QPointF(0, 0)
+        self.rotation = 0  # 旋转角度
+        self.scale_factor = 1.0  # 缩放因子
+        self.is_selected = False
+        self.z_value = 0  # z顺序，用于图层排序
+        
+    def set_pen(self, pen):
+        self.pen = pen
+        
+    def set_brush(self, brush):
+        self.brush = brush
+        print(f"Shape设置画刷: {brush.color().red()}, {brush.color().green()}, {brush.color().blue()}, {brush.color().alpha()}")
+    
+    def set_position(self, pos):
+        self.position = pos
+    
+    def rotate(self, angle):
+        """旋转图形"""
+        self.rotation += angle
+        
+    def scale(self, factor):
+        """缩放图形"""
+        self.scale_factor *= factor
+        
+    def contains(self, point):
+        """检查点是否在图形内"""
+        return False
+        
+    def bounding_rect(self):
+        """获取图形的边界矩形"""
+        return QRectF()
+        
+    def paint(self, painter):
+        """绘制图形"""
+        painter.save()
+        # 应用变换
+        painter.translate(self.position)
+        painter.rotate(self.rotation)
+        painter.scale(self.scale_factor, self.scale_factor)
+        
+        # 设置画笔和画刷
+        painter.setPen(self.pen)
+        painter.setBrush(self.brush)
+        
+        # 打印当前画刷颜色
+        brush_color = self.brush.color()
+        print(f"绘制时的画刷颜色: {brush_color.red()}, {brush_color.green()}, {brush_color.blue()}, {brush_color.alpha()}")
+        
+        # 如果被选中，绘制选择指示器
+        if self.is_selected:
+            select_pen = QPen(Qt.blue, 1, Qt.DashLine)
+            painter.setPen(select_pen)
+            painter.setBrush(Qt.transparent)
+            rect = self.bounding_rect()
+            painter.drawRect(rect.adjusted(-3, -3, 3, 3))
+            painter.setPen(self.pen)
+            painter.setBrush(self.brush)
+        
+        # 子类实现具体绘制逻辑
+        self._draw(painter)
+        
+        painter.restore()
+        
+    def _draw(self, painter):
+        """具体的绘制实现，由子类覆盖"""
+        pass
+    
+    def clone(self):
+        """创建图形的副本"""
+        return Shape()
+
+
+class Line(Shape):
+    """直线"""
+    def __init__(self, start=QPointF(0, 0), end=QPointF(100, 100)):
+        super().__init__()
+        self.start_point = start
+        self.end_point = end
+        
+    def _draw(self, painter):
+        painter.drawLine(self.start_point, self.end_point)
+        
+    def contains(self, point):
+        """检查点是否在线段上或附近"""
+        line_path = QPainterPath()
+        line_path.moveTo(self.start_point)
+        line_path.lineTo(self.end_point)
+        
+        # 创建一个宽度为pen宽度的stroke path
+        stroke_path = QPainterPath()
+        stroke_pen = QPen(self.pen)
+        stroke_pen.setWidth(max(5, self.pen.width()))
+        stroke_path.addPath(line_path)
+        
+        return stroke_path.contains(point)
+        
+    def bounding_rect(self):
+        """获取直线的边界矩形"""
+        return QRectF(
+            min(self.start_point.x(), self.end_point.x()),
+            min(self.start_point.y(), self.end_point.y()),
+            abs(self.end_point.x() - self.start_point.x()),
+            abs(self.end_point.y() - self.start_point.y())
+        )
+        
+    def clone(self):
+        """创建直线的副本"""
+        line_copy = Line(QPointF(self.start_point), QPointF(self.end_point))
+        line_copy.pen = QPen(self.pen)
+        line_copy.brush = QBrush(self.brush)
+        line_copy.position = QPointF(self.position)
+        line_copy.rotation = self.rotation
+        line_copy.scale_factor = self.scale_factor
+        line_copy.is_selected = False
+        return line_copy
+
+
+class Rectangle(Shape):
+    """矩形"""
+    def __init__(self, rect=QRectF(0, 0, 100, 80)):
+        super().__init__()
+        self.rect = rect
+        
+    def _draw(self, painter):
+        painter.drawRect(self.rect)
+        
+    def contains(self, point):
+        """检查点是否在矩形内"""
+        return self.rect.contains(point)
+        
+    def bounding_rect(self):
+        """获取矩形的边界"""
+        return self.rect
+        
+    def clone(self):
+        """创建矩形的副本"""
+        rect_copy = Rectangle(QRectF(self.rect))
+        rect_copy.pen = QPen(self.pen)
+        rect_copy.brush = QBrush(self.brush)
+        rect_copy.position = QPointF(self.position)
+        rect_copy.rotation = self.rotation
+        rect_copy.scale_factor = self.scale_factor
+        rect_copy.is_selected = False
+        return rect_copy
+
+
+class Circle(Shape):
+    """圆形"""
+    def __init__(self, center=QPointF(0, 0), radius=50):
+        super().__init__()
+        self.center = center
+        self.radius = radius
+        
+    def _draw(self, painter):
+        painter.drawEllipse(self.center, self.radius, self.radius)
+        
+    def contains(self, point):
+        """检查点是否在圆内"""
+        dx = point.x() - self.center.x()
+        dy = point.y() - self.center.y()
+        return dx*dx + dy*dy <= self.radius*self.radius
+        
+    def bounding_rect(self):
+        """获取圆的边界矩形"""
+        return QRectF(
+            self.center.x() - self.radius,
+            self.center.y() - self.radius,
+            2 * self.radius,
+            2 * self.radius
+        )
+        
+    def clone(self):
+        """创建圆的副本"""
+        circle_copy = Circle(QPointF(self.center), self.radius)
+        circle_copy.pen = QPen(self.pen)
+        circle_copy.brush = QBrush(self.brush)
+        circle_copy.position = QPointF(self.position)
+        circle_copy.rotation = self.rotation
+        circle_copy.scale_factor = self.scale_factor
+        circle_copy.is_selected = False
+        return circle_copy
+
+
+class ArchimedeanSpiral(Shape):
+    """阿基米德螺线"""
+    def __init__(self, center=QPointF(0, 0), a=0.25, b=0.25, turns=3):
+        super().__init__()
+        self.center = center
+        self.a = a  # 螺线参数
+        self.b = b  # 螺线参数
+        self.turns = turns  # 螺线的圈数
+        
+    def _draw(self, painter):
+        path = QPainterPath()
+        
+        # 计算螺线点
+        first_point = True
+        for theta in np.linspace(0, 2 * math.pi * self.turns, 500):
+            r = self.a + self.b * theta
+            x = r * math.cos(theta) + self.center.x()
+            y = r * math.sin(theta) + self.center.y()
+            
+            if first_point:
+                path.moveTo(x, y)
+                first_point = False
+            else:
+                path.lineTo(x, y)
+        
+        painter.drawPath(path)
+        
+    def contains(self, point):
+        """检查点是否在螺线上或附近"""
+        # 简化为检查是否在边界矩形内
+        return self.bounding_rect().contains(point)
+        
+    def bounding_rect(self):
+        """获取螺线的边界矩形"""
+        # 最大半径是在最大角度时
+        max_r = self.a + self.b * (2 * math.pi * self.turns)
+        return QRectF(
+            self.center.x() - max_r,
+            self.center.y() - max_r,
+            2 * max_r,
+            2 * max_r
+        )
+        
+    def clone(self):
+        """创建螺线的副本"""
+        spiral_copy = ArchimedeanSpiral(QPointF(self.center), self.a, self.b, self.turns)
+        spiral_copy.pen = QPen(self.pen)
+        spiral_copy.brush = QBrush(self.brush)
+        spiral_copy.position = QPointF(self.position)
+        spiral_copy.rotation = self.rotation
+        spiral_copy.scale_factor = self.scale_factor
+        spiral_copy.is_selected = False
+        return spiral_copy
+
+
+class SineCurve(Shape):
+    """正弦曲线"""
+    def __init__(self, start=QPointF(0, 0), amplitude=50, frequency=0.05, length=400):
+        super().__init__()
+        self.start = start
+        self.amplitude = amplitude
+        self.frequency = frequency
+        self.length = length
+        
+    def _draw(self, painter):
+        path = QPainterPath()
+        
+        first_point = True
+        for x in range(int(self.length)):
+            y = self.amplitude * math.sin(self.frequency * x)
+            if first_point:
+                path.moveTo(x + self.start.x(), y + self.start.y())
+                first_point = False
+            else:
+                path.lineTo(x + self.start.x(), y + self.start.y())
+        
+        painter.drawPath(path)
+        
+    def contains(self, point):
+        """检查点是否在正弦曲线上或附近"""
+        # 简化为检查是否在边界矩形内
+        return self.bounding_rect().contains(point)
+        
+    def bounding_rect(self):
+        """获取正弦曲线的边界矩形"""
+        return QRectF(
+            self.start.x(),
+            self.start.y() - self.amplitude,
+            self.length,
+            2 * self.amplitude
+        )
+        
+    def clone(self):
+        """创建正弦曲线的副本"""
+        curve_copy = SineCurve(QPointF(self.start), self.amplitude, self.frequency, self.length)
+        curve_copy.pen = QPen(self.pen)
+        curve_copy.brush = QBrush(self.brush)
+        curve_copy.position = QPointF(self.position)
+        curve_copy.rotation = self.rotation
+        curve_copy.scale_factor = self.scale_factor
+        curve_copy.is_selected = False
+        return curve_copy
+
+
+class Freehand(Shape):
+    """自由绘制线条"""
+    def __init__(self):
+        super().__init__()
+        self.points = []
+        
+    def add_point(self, point):
+        self.points.append(point)
+        
+    def _draw(self, painter):
+        if len(self.points) < 2:
+            return
+            
+        path = QPainterPath()
+        path.moveTo(self.points[0])
+        
+        for point in self.points[1:]:
+            path.lineTo(point)
+            
+        painter.drawPath(path)
+        
+    def contains(self, point):
+        """检查点是否在曲线上或附近"""
+        if len(self.points) < 2:
+            return False
+            
+        path = QPainterPath()
+        path.moveTo(self.points[0])
+        
+        for p in self.points[1:]:
+            path.lineTo(p)
+            
+        # 创建一个宽度为pen宽度的stroke path
+        stroke_path = QPainterPath()
+        stroke_pen = QPen(self.pen)
+        stroke_pen.setWidth(max(5, self.pen.width()))
+        stroke_path = path
+        
+        return stroke_path.contains(point)
+        
+    def bounding_rect(self):
+        """获取自由绘制线条的边界矩形"""
+        if not self.points:
+            return QRectF()
+            
+        min_x = min(point.x() for point in self.points)
+        min_y = min(point.y() for point in self.points)
+        max_x = max(point.x() for point in self.points)
+        max_y = max(point.y() for point in self.points)
+        
+        return QRectF(min_x, min_y, max_x - min_x, max_y - min_y)
+        
+    def clone(self):
+        """创建自由绘制线条的副本"""
+        freehand_copy = Freehand()
+        for point in self.points:
+            freehand_copy.add_point(QPointF(point))
+        freehand_copy.pen = QPen(self.pen)
+        freehand_copy.brush = QBrush(self.brush)
+        freehand_copy.position = QPointF(self.position)
+        freehand_copy.rotation = self.rotation
+        freehand_copy.scale_factor = self.scale_factor
+        freehand_copy.is_selected = False
+        return freehand_copy
+
+
+class ShapeGroup(Shape):
+    """图形组合"""
+    def __init__(self):
+        super().__init__()
+        self.shapes = []
+        
+    def add(self, shape):
+        self.shapes.append(shape)
+        
+    def remove(self, shape):
+        if shape in self.shapes:
+            self.shapes.remove(shape)
+            
+    def _draw(self, painter):
+        for shape in self.shapes:
+            shape.paint(painter)
+            
+    def contains(self, point):
+        """检查点是否在组合图形内"""
+        for shape in self.shapes:
+            if shape.contains(point):
+                return True
+        return False
+        
+    def bounding_rect(self):
+        """获取组合图形的边界矩形"""
+        if not self.shapes:
+            return QRectF()
+            
+        rects = [shape.bounding_rect() for shape in self.shapes]
+        min_x = min(rect.left() for rect in rects)
+        min_y = min(rect.top() for rect in rects)
+        max_x = max(rect.right() for rect in rects)
+        max_y = max(rect.bottom() for rect in rects)
+        
+        return QRectF(min_x, min_y, max_x - min_x, max_y - min_y)
+        
+    def clone(self):
+        """创建组合图形的副本"""
+        group_copy = ShapeGroup()
+        for shape in self.shapes:
+            group_copy.add(shape.clone())
+        group_copy.pen = QPen(self.pen)
+        group_copy.brush = QBrush(self.brush)
+        group_copy.position = QPointF(self.position)
+        group_copy.rotation = self.rotation
+        group_copy.scale_factor = self.scale_factor
+        group_copy.is_selected = False
+        return group_copy 
