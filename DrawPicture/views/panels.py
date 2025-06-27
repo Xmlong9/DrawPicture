@@ -128,8 +128,7 @@ class ColorPanel(QWidget):
         
         # 填充颜色选择器 - 设置更醒目的标签
         fill_layout = QHBoxLayout()
-        fill_label = QLabel("<b>填充:</b>")  # 使用HTML粗体
-        fill_label.setStyleSheet("color: #0066CC;") # 设置蓝色
+        fill_label = QLabel("填充:")  # 普通文本，不使用HTML
         fill_layout.addWidget(fill_label)
         self.fill_color_btn = QPushButton()
         self.fill_color_btn.setFixedSize(30, 30)
