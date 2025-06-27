@@ -208,13 +208,19 @@ class ColorPanel(QWidget):
             
     def _on_fill_color_clicked(self):
         """填充颜色按钮点击处理"""
-        color = QColorDialog.getColor(self.fill_color, self, "选择填充颜色",
+        # 获取当前填充颜色，如果是透明的，则创建一个不透明版本作为默认选择
+        current_color = self.fill_color
+        if current_color.alpha() == 0:
+            # 创建不透明版本的颜色（保持RGB值，但设置alpha为255）
+            current_color = QColor(current_color.red(), current_color.green(), current_color.blue(), 255)
+        
+        # 打开颜色对话框
+        color = QColorDialog.getColor(current_color, self, "选择填充颜色",
                                     QColorDialog.ShowAlphaChannel)
         if color.isValid():
             self.fill_color = color
             self._update_color_button(self.fill_color_btn, color)
             self.color_changed.emit(color, True)  # 发送颜色变化信号，是填充色
-            print(f"设置填充颜色: {color.red()}, {color.green()}, {color.blue()}, {color.alpha()}")
             
     def _on_predefined_color_clicked(self, color):
         """预定义颜色按钮点击处理"""

@@ -22,7 +22,6 @@ class Shape:
         
     def set_brush(self, brush):
         self.brush = brush
-        print(f"Shape设置画刷: {brush.color().red()}, {brush.color().green()}, {brush.color().blue()}, {brush.color().alpha()}")
     
     def set_position(self, pos):
         self.position = pos
@@ -54,10 +53,6 @@ class Shape:
         # 设置画笔和画刷
         painter.setPen(self.pen)
         painter.setBrush(self.brush)
-        
-        # 打印当前画刷颜色
-        brush_color = self.brush.color()
-        print(f"绘制时的画刷颜色: {brush_color.red()}, {brush_color.green()}, {brush_color.blue()}, {brush_color.alpha()}")
         
         # 如果被选中，绘制选择指示器
         if self.is_selected:

@@ -46,7 +46,6 @@ class DrawingTool:
             # 应用画刷（填充）
             brush = self.color_tool.get_brush()
             shape.set_brush(brush)
-            print(f"应用填充颜色: {self.color_tool.fill_color.red()}, {self.color_tool.fill_color.green()}, {self.color_tool.fill_color.blue()}, {self.color_tool.fill_color.alpha()}")
 
 
 class SelectionTool(DrawingTool):
@@ -320,7 +319,6 @@ class ColorTool:
         
         # 创建透明填充颜色
         self.fill_color = QColor(255, 255, 255, 0)  # 完全透明的白色
-        print(f"初始化填充颜色: {self.fill_color.red()}, {self.fill_color.green()}, {self.fill_color.blue()}, {self.fill_color.alpha()}")
         
         self.line_width = 2  # 默认线宽
         self.line_style = Qt.SolidLine  # 默认线型
@@ -342,7 +340,6 @@ class ColorTool:
     def set_fill_color(self, color):
         """设置填充颜色"""
         self.fill_color = color
-        print(f"ColorTool设置填充颜色: {color.red()}, {color.green()}, {color.blue()}, {color.alpha()}")
         
     def set_line_width(self, width):
         """设置线宽"""
