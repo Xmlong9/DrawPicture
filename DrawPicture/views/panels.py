@@ -126,11 +126,14 @@ class ColorPanel(QWidget):
         pen_layout.addWidget(self.pen_color_btn)
         color_layout.addLayout(pen_layout)
         
-        # 填充颜色选择器
+        # 填充颜色选择器 - 设置更醒目的标签
         fill_layout = QHBoxLayout()
-        fill_layout.addWidget(QLabel("填充:"))
+        fill_label = QLabel("<b>填充:</b>")  # 使用HTML粗体
+        fill_label.setStyleSheet("color: #0066CC;") # 设置蓝色
+        fill_layout.addWidget(fill_label)
         self.fill_color_btn = QPushButton()
         self.fill_color_btn.setFixedSize(30, 30)
+        self.fill_color_btn.setToolTip("设置图形填充颜色")
         self._update_color_button(self.fill_color_btn, self.fill_color)
         self.fill_color_btn.clicked.connect(self._on_fill_color_clicked)
         fill_layout.addWidget(self.fill_color_btn)
@@ -294,40 +297,71 @@ class LayerPanel(QWidget):
         
     def update_layer_list(self):
         """更新图层列表"""
+        # 保存当前滚动位置
+        scroll_pos = self.layer_list.verticalScrollBar().value()
+        
         self.layer_list.clear()
         
         for i, layer in enumerate(self.document.layers):
-            item = QListWidgetItem(layer['name'])
+            # 创建图层项目，不设置文本（避免重复显示）
+            item = QListWidgetItem("")  # 文本设为空字符串
             item.setData(Qt.UserRole, i)  # 存储图层索引
             
-            # 如果是当前选中的图层，设置为选中状态
-            if i == self.document.current_layer:
-                item.setSelected(True)
-                self.layer_list.setCurrentItem(item)
-                
-            # 添加可见性复选框
-            check_box = QCheckBox()
-            check_box.setChecked(layer['visible'])
-            check_box.stateChanged.connect(lambda state, idx=i: self._on_layer_visibility_changed(idx, state))
+            # 设置足够的高度以容纳小部件
+            item.setSizeHint(QSize(item.sizeHint().width(), 30))
             
             # 将项目添加到列表
             self.layer_list.addItem(item)
             
             # 设置项目的小部件
             widget = QWidget()
+            
+            # 判断是否为当前图层，设置不同的样式
+            if i == self.document.current_layer:
+                widget.setStyleSheet("""
+                    background-color: #3388FF; 
+                    border-radius: 3px; 
+                    padding: 2px;
+                """)
+            
             layout = QHBoxLayout(widget)
+            layout.setAlignment(Qt.AlignLeft)  # 左对齐
+            
+            # 添加可见性复选框
+            check_box = QCheckBox()
+            check_box.setChecked(layer['visible'])
+            check_box.stateChanged.connect(lambda state, idx=i: self._on_layer_visibility_changed(idx, state))
             layout.addWidget(check_box)
+            
+            # 添加图层名称标签
+            label = QLabel(layer['name'])
+            if i == self.document.current_layer:
+                label.setStyleSheet("color: white; font-weight: bold;")
+            layout.addWidget(label)
+            
             layout.addStretch()
-            layout.setContentsMargins(5, 2, 5, 2)
+            layout.setContentsMargins(5, 3, 5, 3)
+            layout.setSpacing(10)  # 增加元素之间的间距
             widget.setLayout(layout)
             
             self.layer_list.setItemWidget(item, widget)
             
+            # 如果是当前选中的图层，设置为选中状态
+            if i == self.document.current_layer:
+                item.setSelected(True)
+                self.layer_list.setCurrentItem(item)
+        
+        # 恢复滚动位置
+        self.layer_list.verticalScrollBar().setValue(scroll_pos)
+        
     def _on_layer_clicked(self, item):
         """图层点击处理"""
         layer_index = item.data(Qt.UserRole)
         self.document.select_layer(layer_index)
         self.layer_selected.emit(layer_index)
+        
+        # 选择图层后立即刷新图层列表的显示
+        self.update_layer_list()
         
     def _on_layer_visibility_changed(self, layer_index, state):
         """图层可见性变化处理"""

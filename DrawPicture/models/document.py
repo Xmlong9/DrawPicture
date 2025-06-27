@@ -262,6 +262,8 @@ class DrawingDocument(QObject):
         """选择当前图层"""
         if 0 <= layer_index < len(self.layers):
             self.current_layer = layer_index
+            # 发送文档变化信号，通知视图更新
+            self.document_changed.emit()
     
     # 文档操作
     def new_document(self):

@@ -130,6 +130,8 @@ class Rectangle(Shape):
         self.rect = rect
         
     def _draw(self, painter):
+        # 添加调试信息
+        print(f"绘制矩形，填充颜色: {self.brush.color().name()}, 透明度: {self.brush.color().alpha()}")
         painter.drawRect(self.rect)
         
     def contains(self, point):
