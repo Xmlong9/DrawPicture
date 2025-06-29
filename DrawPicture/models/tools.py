@@ -360,6 +360,34 @@ class EraserTool(DrawingTool):
         # 设置光标热点为橡皮擦的左下角
         self.cursor = QCursor(pixmap, 8, 22)
         
+    def set_eraser_size(self, size):
+        """设置橡皮擦大小"""
+        self.eraser_width = size
+        # 更新光标大小
+        self._update_cursor()
+        
+    def _update_cursor(self):
+        """更新橡皮擦光标大小"""
+        # 根据橡皮擦大小创建圆形光标
+        cursor_size = max(32, self.eraser_width + 8)
+        pixmap = QPixmap(cursor_size, cursor_size)
+        pixmap.fill(Qt.transparent)
+        
+        painter = QPainter(pixmap)
+        painter.setRenderHint(QPainter.Antialiasing)
+        
+        # 绘制表示橡皮擦大小的圆形
+        painter.setPen(QPen(Qt.black, 1, Qt.DashLine))
+        painter.setBrush(Qt.transparent)
+        painter.drawEllipse(cursor_size//2 - self.eraser_width//2, 
+                          cursor_size//2 - self.eraser_width//2,
+                          self.eraser_width, self.eraser_width)
+        
+        painter.end()
+        
+        # 设置光标热点为中心点
+        self.cursor = QCursor(pixmap, cursor_size//2, cursor_size//2)
+        
     def mouse_press(self, event):
         if event.button() == Qt.LeftButton:
             self.is_drawing = True
@@ -368,7 +396,7 @@ class EraserTool(DrawingTool):
             self.current_shape.add_point(event.pos())
             # 设置白色画笔
             pen = QPen(QColor(255, 255, 255))
-            pen.setWidth(self.eraser_width)  # 使用较粗的线宽
+            pen.setWidth(self.eraser_width)  # 使用设置的橡皮擦宽度
             pen.setCapStyle(Qt.RoundCap)  # 设置圆形笔帽，使擦除更平滑
             pen.setJoinStyle(Qt.RoundJoin)  # 设置圆形连接点
             self.current_shape.set_pen(pen)
@@ -378,6 +406,8 @@ class EraserTool(DrawingTool):
             # 将图形添加到最顶层
             max_z = max([shape.z_value for shape in self.document.shapes]) if self.document.shapes else 0
             self.current_shape.z_value = max_z + 1
+            # 标记为橡皮擦图形，使其无法被选择
+            self.current_shape.is_eraser = True
             self.document.add_shape(self.current_shape)
         
     def mouse_move(self, event):
@@ -404,6 +434,8 @@ class EraserTool(DrawingTool):
                 # 将图形添加到最顶层
                 max_z = max([shape.z_value for shape in self.document.shapes]) if self.document.shapes else 0
                 self.current_shape.z_value = max_z + 1
+                # 标记为橡皮擦图形，使其无法被选择
+                self.current_shape.is_eraser = True
                 self.document.add_shape(self.current_shape)
             else:
                 self.current_shape.add_point(current_pos)

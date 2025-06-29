@@ -110,11 +110,14 @@ class ColorPanel(QWidget):
     color_changed = pyqtSignal(QColor, bool)  # 颜色变化信号，参数：颜色，是否是填充色
     line_width_changed = pyqtSignal(int)  # 线宽变化信号
     line_style_changed = pyqtSignal(int)  # 线型变化信号
+    eraser_size_changed = pyqtSignal(int)  # 橡皮擦大小变化信号
     
     def __init__(self, parent=None):
         super().__init__(parent)
         self.pen_color = QColor(0, 0, 0)  # 默认黑色线条
         self.fill_color = QColor(0, 0, 0, 0)  # 默认透明填充
+        self.eraser_size = 20  # 默认橡皮擦大小
+        self.current_tool = "selection"  # 当前选中的工具
         self.init_ui()
         
     def init_ui(self):
@@ -183,6 +186,23 @@ class ColorPanel(QWidget):
         line_width_layout.addWidget(self.line_width_label)
         color_layout.addLayout(line_width_layout)
         
+        # 橡皮擦大小选择（默认隐藏）
+        self.eraser_size_widget = QWidget()
+        eraser_size_layout = QHBoxLayout(self.eraser_size_widget)
+        eraser_size_layout.setContentsMargins(0, 0, 0, 0)
+        eraser_size_layout.addWidget(QLabel("橡皮擦大小:"))
+        self.eraser_size_slider = QSlider(Qt.Horizontal)
+        self.eraser_size_slider.setRange(5, 50)
+        self.eraser_size_slider.setValue(self.eraser_size)
+        self.eraser_size_slider.setTickPosition(QSlider.TicksBelow)
+        self.eraser_size_slider.setTickInterval(5)
+        self.eraser_size_slider.valueChanged.connect(self._on_eraser_size_changed)
+        eraser_size_layout.addWidget(self.eraser_size_slider)
+        self.eraser_size_label = QLabel(str(self.eraser_size))
+        eraser_size_layout.addWidget(self.eraser_size_label)
+        color_layout.addWidget(self.eraser_size_widget)
+        self.eraser_size_widget.hide()  # 默认隐藏
+        
         # 线型选择
         line_style_layout = QHBoxLayout()
         line_style_layout.addWidget(QLabel("线型:"))
@@ -249,6 +269,26 @@ class ColorPanel(QWidget):
         style = self.line_style_combo.itemData(index)
         self.line_style_changed.emit(style)
         
+    def set_current_tool(self, tool_name):
+        """设置当前工具"""
+        self.current_tool = tool_name
+        # 根据工具显示或隐藏相关控件
+        self._update_ui_for_tool()
+        
+    def _update_ui_for_tool(self):
+        """根据当前工具更新UI"""
+        # 显示或隐藏橡皮擦大小控件
+        if self.current_tool == "eraser":
+            self.eraser_size_widget.show()
+        else:
+            self.eraser_size_widget.hide()
+        
+    def _on_eraser_size_changed(self, value):
+        """橡皮擦大小变化处理"""
+        self.eraser_size = value
+        self.eraser_size_label.setText(str(value))
+        self.eraser_size_changed.emit(value)
+
 
 class LayerPanel(QWidget):
     """图层面板"""

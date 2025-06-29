@@ -85,6 +85,7 @@ class MainWindow(QMainWindow):
         self.color_panel.color_changed.connect(self.on_color_changed)
         self.color_panel.line_width_changed.connect(self.on_line_width_changed)
         self.color_panel.line_style_changed.connect(self.on_line_style_changed)
+        self.color_panel.eraser_size_changed.connect(self.on_eraser_size_changed)
         self.create_dock_widget("颜色", self.color_panel, Qt.LeftDockWidgetArea)
         
         # 创建图层面板
@@ -142,6 +143,9 @@ class MainWindow(QMainWindow):
             self.current_tool = self.tools[tool_name]
             self.canvas.set_tool(self.current_tool)
             self.set_status_message(f"当前工具: {self.current_tool.name}")
+            
+            # 通知颜色面板当前工具已更改
+            self.color_panel.set_current_tool(tool_name)
             
     def on_color_changed(self, color, is_fill):
         """颜色变化处理"""
@@ -207,6 +211,12 @@ class MainWindow(QMainWindow):
                 pen.setStyle(style)
                 shape.set_pen(pen)
             self.document.document_changed.emit()
+            
+    def on_eraser_size_changed(self, size):
+        """橡皮擦大小变化处理"""
+        # 更新橡皮擦工具的大小设置
+        if "eraser" in self.tools:
+            self.tools["eraser"].set_eraser_size(size)
     
     def set_status_message(self, message):
         """设置状态栏消息"""

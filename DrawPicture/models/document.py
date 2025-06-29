@@ -94,10 +94,24 @@ class DrawingDocument(QObject):
     
     def get_shape_at(self, pos):
         """获取指定位置的图形"""
+        # 首先检查是否有橡皮擦图形覆盖该位置
+        for shape in reversed(self.shapes):
+            # 跳过不可见图层的图形
+            if not self.layers[shape.z_value]['visible']:
+                continue
+                
+            # 如果是橡皮擦图形且包含该点，则认为该位置不能选中任何图形
+            if hasattr(shape, 'is_eraser') and shape.is_eraser and shape.contains(pos):
+                return None
+        
         # 倒序搜索以优先找到上层图形
         for shape in reversed(self.shapes):
             # 跳过不可见图层的图形
             if not self.layers[shape.z_value]['visible']:
+                continue
+                
+            # 跳过橡皮擦图形，使其无法被选择
+            if hasattr(shape, 'is_eraser') and shape.is_eraser:
                 continue
                 
             if shape.contains(pos):
