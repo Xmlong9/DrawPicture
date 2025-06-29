@@ -8,15 +8,29 @@ import math
 
 class Shape:
     """基础图形类"""
-    def __init__(self):
-        self.pen = QPen(Qt.black, 2, Qt.SolidLine)
-        self.brush = QBrush(Qt.transparent)
+    def __init__(self, color=None, fill_color=None, line_width=1, line_style=Qt.SolidLine, layer="默认图层"):
+        # 图形属性
+        self.color = color or QColor(0, 0, 0)
+        self.fill_color = fill_color
+        self.line_width = line_width
+        self.line_style = line_style
+        self.layer = layer  # 图层名称
+        
+        # 选择状态
+        self.selected = False
+        
+        # 标记是否为橡皮擦
+        self.is_eraser = False
+        
+        self.pen = QPen(self.color, self.line_width, self.line_style)
+        self.brush = QBrush(Qt.transparent)  # 默认透明填充
+        if self.fill_color is not None:
+            self.brush = QBrush(self.fill_color)
+            
         self.position = QPointF(0, 0)
         self.rotation = 0  # 旋转角度
         self.scale_factor = 1.0  # 缩放因子
-        self.is_selected = False
         self.z_value = 0  # z顺序，用于图层排序
-        self.is_eraser = False  # 标记是否为橡皮擦图形
         
     def set_pen(self, pen):
         self.pen = pen
@@ -110,7 +124,7 @@ class Shape:
         painter.setBrush(self.brush)
         
         # 如果被选中，绘制选择指示器
-        if self.is_selected:
+        if self.selected:
             select_pen = QPen(Qt.blue, 1, Qt.DashLine)
             painter.setPen(select_pen)
             painter.setBrush(Qt.transparent)
@@ -130,13 +144,13 @@ class Shape:
     
     def clone(self):
         """创建图形的副本"""
-        return Shape()
+        return Shape(self.color, self.fill_color, self.line_width, self.line_style, self.layer)
 
 
 class Line(Shape):
     """直线"""
-    def __init__(self, start=QPointF(0, 0), end=QPointF(100, 100)):
-        super().__init__()
+    def __init__(self, start=QPointF(0, 0), end=QPointF(100, 100), color=None, fill_color=None, line_width=1, line_style=Qt.SolidLine, layer="默认图层"):
+        super().__init__(color, fill_color, line_width, line_style, layer)
         self.start_point = start
         self.end_point = end
         
@@ -183,20 +197,15 @@ class Line(Shape):
         
     def clone(self):
         """创建直线的副本"""
-        line_copy = Line(QPointF(self.start_point), QPointF(self.end_point))
-        line_copy.pen = QPen(self.pen)
-        line_copy.brush = QBrush(self.brush)
-        line_copy.position = QPointF(self.position)
-        line_copy.rotation = self.rotation
-        line_copy.scale_factor = self.scale_factor
-        line_copy.is_selected = False
+        line_copy = Line(QPointF(self.start_point), QPointF(self.end_point), self.color, self.fill_color, self.line_width, self.line_style, self.layer)
+        line_copy.selected = False
         return line_copy
 
 
 class Rectangle(Shape):
     """矩形"""
-    def __init__(self, rect=QRectF(0, 0, 100, 80)):
-        super().__init__()
+    def __init__(self, rect=QRectF(0, 0, 100, 80), color=None, fill_color=None, line_width=1, line_style=Qt.SolidLine, layer="默认图层"):
+        super().__init__(color, fill_color, line_width, line_style, layer)
         self.rect = rect
         
     def _draw(self, painter):
@@ -212,20 +221,15 @@ class Rectangle(Shape):
         
     def clone(self):
         """创建矩形的副本"""
-        rect_copy = Rectangle(QRectF(self.rect))
-        rect_copy.pen = QPen(self.pen)
-        rect_copy.brush = QBrush(self.brush)
-        rect_copy.position = QPointF(self.position)
-        rect_copy.rotation = self.rotation
-        rect_copy.scale_factor = self.scale_factor
-        rect_copy.is_selected = False
+        rect_copy = Rectangle(QRectF(self.rect), self.color, self.fill_color, self.line_width, self.line_style, self.layer)
+        rect_copy.selected = False
         return rect_copy
 
 
 class Circle(Shape):
     """圆形"""
-    def __init__(self, center=QPointF(0, 0), radius=50):
-        super().__init__()
+    def __init__(self, center=QPointF(0, 0), radius=50, color=None, fill_color=None, line_width=1, line_style=Qt.SolidLine, layer="默认图层"):
+        super().__init__(color, fill_color, line_width, line_style, layer)
         self.center = center
         self.radius = radius
         
@@ -249,20 +253,15 @@ class Circle(Shape):
         
     def clone(self):
         """创建圆的副本"""
-        circle_copy = Circle(QPointF(self.center), self.radius)
-        circle_copy.pen = QPen(self.pen)
-        circle_copy.brush = QBrush(self.brush)
-        circle_copy.position = QPointF(self.position)
-        circle_copy.rotation = self.rotation
-        circle_copy.scale_factor = self.scale_factor
-        circle_copy.is_selected = False
+        circle_copy = Circle(QPointF(self.center), self.radius, self.color, self.fill_color, self.line_width, self.line_style, self.layer)
+        circle_copy.selected = False
         return circle_copy
 
 
 class ArchimedeanSpiral(Shape):
     """阿基米德螺线"""
-    def __init__(self, center=QPointF(0, 0), a=0.25, b=0.25, turns=3):
-        super().__init__()
+    def __init__(self, center=QPointF(0, 0), a=0.25, b=0.25, turns=3, color=None, fill_color=None, line_width=1, line_style=Qt.SolidLine, layer="默认图层"):
+        super().__init__(color, fill_color, line_width, line_style, layer)
         self.center = center
         self.a = a  # 螺线参数
         self.b = b  # 螺线参数
@@ -338,20 +337,15 @@ class ArchimedeanSpiral(Shape):
         
     def clone(self):
         """创建螺线的副本"""
-        spiral_copy = ArchimedeanSpiral(QPointF(self.center), self.a, self.b, self.turns)
-        spiral_copy.pen = QPen(self.pen)
-        spiral_copy.brush = QBrush(self.brush)
-        spiral_copy.position = QPointF(self.position)
-        spiral_copy.rotation = self.rotation
-        spiral_copy.scale_factor = self.scale_factor
-        spiral_copy.is_selected = False
+        spiral_copy = ArchimedeanSpiral(QPointF(self.center), self.a, self.b, self.turns, self.color, self.fill_color, self.line_width, self.line_style, self.layer)
+        spiral_copy.selected = False
         return spiral_copy
 
 
 class SineCurve(Shape):
     """正弦曲线"""
-    def __init__(self, start=QPointF(0, 0), amplitude=50, frequency=0.05, length=400):
-        super().__init__()
+    def __init__(self, start=QPointF(0, 0), amplitude=50, frequency=0.05, length=400, color=None, fill_color=None, line_width=1, line_style=Qt.SolidLine, layer="默认图层"):
+        super().__init__(color, fill_color, line_width, line_style, layer)
         self.start_point = start
         self.amplitude = amplitude
         self.frequency = frequency
@@ -360,9 +354,12 @@ class SineCurve(Shape):
     def _draw(self, painter):
         path = QPainterPath()
         
+        # 增加采样点数量，使曲线更平滑
+        num_points = 500  # 增加点数
+        
         # 计算正弦曲线点
         first_point = True
-        for x in np.linspace(0, self.length, 200):
+        for x in np.linspace(0, self.length, num_points):
             y = self.amplitude * math.sin(x * self.frequency)
             
             if first_point:
@@ -371,6 +368,8 @@ class SineCurve(Shape):
             else:
                 path.lineTo(x + self.start_point.x(), y + self.start_point.y())
         
+        # 使用抗锯齿绘制
+        painter.setRenderHint(QPainter.Antialiasing, True)
         painter.drawPath(path)
         
     def _contains_local(self, point):
@@ -398,20 +397,15 @@ class SineCurve(Shape):
         
     def clone(self):
         """创建正弦曲线的副本"""
-        curve_copy = SineCurve(QPointF(self.start_point), self.amplitude, self.frequency, self.length)
-        curve_copy.pen = QPen(self.pen)
-        curve_copy.brush = QBrush(self.brush)
-        curve_copy.position = QPointF(self.position)
-        curve_copy.rotation = self.rotation
-        curve_copy.scale_factor = self.scale_factor
-        curve_copy.is_selected = False
+        curve_copy = SineCurve(QPointF(self.start_point), self.amplitude, self.frequency, self.length, self.color, self.fill_color, self.line_width, self.line_style, self.layer)
+        curve_copy.selected = False
         return curve_copy
 
 
 class Freehand(Shape):
     """自由绘制"""
-    def __init__(self):
-        super().__init__()
+    def __init__(self, color=None, fill_color=None, line_width=1, line_style=Qt.SolidLine, layer="默认图层"):
+        super().__init__(color, fill_color, line_width, line_style, layer)
         self.points = []  # 点列表
         
     def add_point(self, point):
@@ -485,22 +479,17 @@ class Freehand(Shape):
         
     def clone(self):
         """创建自由绘制线条的副本"""
-        freehand_copy = Freehand()
+        freehand_copy = Freehand(self.color, self.fill_color, self.line_width, self.line_style, self.layer)
         for point in self.points:
             freehand_copy.add_point(QPointF(point))
-        freehand_copy.pen = QPen(self.pen)
-        freehand_copy.brush = QBrush(self.brush)
-        freehand_copy.position = QPointF(self.position)
-        freehand_copy.rotation = self.rotation
-        freehand_copy.scale_factor = self.scale_factor
-        freehand_copy.is_selected = False
+        freehand_copy.selected = False
         return freehand_copy
 
 
 class ShapeGroup(Shape):
     """图形组合"""
-    def __init__(self):
-        super().__init__()
+    def __init__(self, color=None, fill_color=None, line_width=1, line_style=Qt.SolidLine, layer="默认图层"):
+        super().__init__(color, fill_color, line_width, line_style, layer)
         self.shapes = []  # 子图形列表
         
     def add(self, shape):
@@ -538,13 +527,8 @@ class ShapeGroup(Shape):
         
     def clone(self):
         """创建组合图形的副本"""
-        group_copy = ShapeGroup()
+        group_copy = ShapeGroup(self.color, self.fill_color, self.line_width, self.line_style, self.layer)
         for shape in self.shapes:
             group_copy.add(shape.clone())
-        group_copy.pen = QPen(self.pen)
-        group_copy.brush = QBrush(self.brush)
-        group_copy.position = QPointF(self.position)
-        group_copy.rotation = self.rotation
-        group_copy.scale_factor = self.scale_factor
-        group_copy.is_selected = False
+        group_copy.selected = False
         return group_copy 

@@ -12,30 +12,34 @@ class DrawingDocument(QObject):
     # 定义信号
     document_changed = pyqtSignal()  # 文档内容发生变化
     selection_changed = pyqtSignal()  # 选择变化
+    layers_changed = pyqtSignal()  # 图层变化
     
     def __init__(self):
+        """初始化绘图文档"""
         super().__init__()
-        self.shapes = []  # 存储所有图形
+        
+        # 图形列表
+        self.shapes = []
         self.selected_shapes = []  # 存储选中的图形
+        
+        # 文件信息
         self.file_path = None  # 文档文件路径
         self.modified = False  # 文档是否被修改
-        self.undo_stack = []  # 撤销栈
-        self.redo_stack = []  # 重做栈
-        self.current_layer = 0  # 当前图层
-        self.layers = [{'name': '默认图层', 'visible': True}]  # 图层列表
+        
+        # 撤销/重做栈
+        self.undo_stack = []
+        self.redo_stack = []
+        
+        # 图层列表
+        self.layers = []
+        self.current_layer = "默认图层"  # 当前图层名称
+        self.add_layer("默认图层")  # 添加默认图层
         
     def add_shape(self, shape):
-        """添加图形到文档"""
-        # 设置图形的z值为当前图层
-        shape.z_value = self.current_layer
-        
-        # 记录操作用于撤销
+        """添加图形"""
         self.record_state()
-        
-        # 添加图形
         self.shapes.append(shape)
-        
-        self.set_modified(True)
+        self.modified = True
         self.document_changed.emit()
         
     def remove_shape(self, shape):
@@ -92,52 +96,46 @@ class DrawingDocument(QObject):
             self.selected_shapes.clear()
             self.selection_changed.emit()
     
-    def get_shape_at(self, pos):
-        """获取指定位置的图形"""
-        # 首先检查是否有橡皮擦图形覆盖该位置
+    def get_shape_at(self, point, exclude_eraser=False):
+        """获取指定点上的图形"""
+        # 从后向前遍历（顶层优先）
         for shape in reversed(self.shapes):
-            # 跳过不可见图层的图形
-            if not self.layers[shape.z_value]['visible']:
+            # 跳过不可见图层中的图形
+            if not self.is_layer_visible(shape.layer):
                 continue
                 
-            # 如果是橡皮擦图形且包含该点，则认为该位置不能选中任何图形
-            if hasattr(shape, 'is_eraser') and shape.is_eraser and shape.contains(pos):
-                return None
-        
-        # 倒序搜索以优先找到上层图形
-        for shape in reversed(self.shapes):
-            # 跳过不可见图层的图形
-            if not self.layers[shape.z_value]['visible']:
+            # 如果指定了排除橡皮擦，则跳过橡皮擦图形
+            if exclude_eraser and shape.is_eraser:
                 continue
                 
-            # 跳过橡皮擦图形，使其无法被选择
-            if hasattr(shape, 'is_eraser') and shape.is_eraser:
-                continue
-                
-            if shape.contains(pos):
+            # 检查点是否在图形内
+            if shape.contains(point):
                 return shape
+                
         return None
     
     def move_selected_shapes(self, delta):
         """移动选中的图形"""
         if not self.selected_shapes:
             return
-            
-        self.record_state()
         
         for shape in self.selected_shapes:
-            shape.set_position(QPointF(shape.position.x() + delta.x(),
-                                     shape.position.y() + delta.y()))
-                                     
-        self.set_modified(True)
+            if hasattr(shape, 'position'):
+                # 更新图形位置
+                shape.position = QPointF(shape.position.x() + delta.x(), 
+                                      shape.position.y() + delta.y())
+                
+        # 发送文档变化信号，强制重绘画布
         self.document_changed.emit()
+        # 发送选择变化信号，确保选择框也更新
+        self.selection_changed.emit()
     
     def rotate_selected_shapes(self, angle):
         """旋转选中的图形"""
         if not self.selected_shapes:
             return
             
-        self.record_state()
+            self.record_state()
         
         for shape in self.selected_shapes:
             shape.rotate(angle)
@@ -150,7 +148,7 @@ class DrawingDocument(QObject):
         if not self.selected_shapes:
             return
             
-        self.record_state()
+            self.record_state()
         
         for shape in self.selected_shapes:
             shape.scale(factor)
@@ -163,7 +161,7 @@ class DrawingDocument(QObject):
         if not self.selected_shapes:
             return
             
-        self.record_state()
+            self.record_state()
         
         new_shapes = []
         for shape in self.selected_shapes:
@@ -188,15 +186,13 @@ class DrawingDocument(QObject):
         if not self.selected_shapes:
             return
             
-        self.record_state()
-        
-        shapes_to_remove = list(self.selected_shapes)
-        for shape in shapes_to_remove:
-            self.shapes.remove(shape)
+            self.record_state()
+        for shape in self.selected_shapes:
+            if shape in self.shapes:
+                self.shapes.remove(shape)
         
         self.selected_shapes.clear()
-        
-        self.set_modified(True)
+        self.modified = True
         self.document_changed.emit()
         self.selection_changed.emit()
     
@@ -233,50 +229,197 @@ class DrawingDocument(QObject):
     # 图层操作
     def add_layer(self, name="新图层"):
         """添加新图层"""
-        self.layers.append({'name': name, 'visible': True})
-        self.current_layer = len(self.layers) - 1
-        return self.current_layer
+        if name not in [layer['name'] for layer in self.layers]:
+            self.layers.append({
+                'name': name,
+                'visible': True,
+                'locked': False,
+                'opacity': 1.0
+            })
+            self.current_layer = name
+            self._notify_layers_changed()
+            return True
+        return False
         
-    def remove_layer(self, layer_index):
+    def remove_layer(self, name):
         """删除图层"""
-        if layer_index < len(self.layers) and layer_index > 0:  # 不删除默认图层
-            # 删除此图层上的所有图形
-            self.record_state()
-            self.shapes = [s for s in self.shapes if s.z_value != layer_index]
+        # 不允许删除最后一个图层
+        if len(self.layers) <= 1:
+            return False
             
-            # 调整更高层图形的z值
-            for shape in self.shapes:
-                if shape.z_value > layer_index:
-                    shape.z_value -= 1
+        # 记录状态用于撤销/重做
+            self.record_state()
+            
+        # 查找图层索引
+        layer_index = -1
+        for i, layer in enumerate(self.layers):
+            if layer['name'] == name:
+                layer_index = i
+                break
+                
+        if layer_index >= 0:
+            # 删除该图层中的所有图形
+            shapes_to_remove = [shape for shape in self.shapes if shape.layer == name]
+            for shape in shapes_to_remove:
+                if shape in self.shapes:
+                    self.shapes.remove(shape)
+                if shape in self.selected_shapes:
+                    self.selected_shapes.remove(shape)
             
             # 删除图层
-            self.layers.pop(layer_index)
+            del self.layers[layer_index]
             
-            # 更新当前图层
-            if self.current_layer >= len(self.layers):
-                self.current_layer = len(self.layers) - 1
-            elif self.current_layer == layer_index:
-                self.current_layer = 0
+            # 如果删除的是当前图层，则选择第一个图层
+            if self.current_layer == name:
+                self.current_layer = self.layers[0]['name']
                 
-            self.set_modified(True)
-            self.document_changed.emit()
+            self.modified = True
+            self._notify_layers_changed()
+            self._notify_document_changed()
+            self.selection_changed.emit()
+            return True
+        return False
     
-    def set_layer_visibility(self, layer_index, visible):
-        """设置图层可见性"""
-        if 0 <= layer_index < len(self.layers):
-            self.layers[layer_index]['visible'] = visible
-            self.document_changed.emit()
-    
-    def rename_layer(self, layer_index, name):
+    def rename_layer(self, old_name, new_name):
         """重命名图层"""
-        if 0 <= layer_index < len(self.layers):
-            self.layers[layer_index]['name'] = name
+        # 检查新名称是否已存在
+        if new_name in [layer['name'] for layer in self.layers]:
+            return False
+            
+        # 查找图层
+        for layer in self.layers:
+            if layer['name'] == old_name:
+                layer['name'] = new_name
+                
+                # 更新图形中的图层引用
+                for shape in self.shapes:
+                    if shape.layer == old_name:
+                        shape.layer = new_name
+                        
+                # 更新当前图层引用
+                if self.current_layer == old_name:
+                    self.current_layer = new_name
+                    
+                self._notify_layers_changed()
+                self._notify_document_changed()
+                return True
+        return False
     
-    def select_layer(self, layer_index):
-        """选择当前图层"""
-        if 0 <= layer_index < len(self.layers):
-            self.current_layer = layer_index
-            # 发送文档变化信号，通知视图更新
+    def move_layer_up(self, name):
+        """上移图层"""
+        # 查找图层索引
+        layer_index = -1
+        for i, layer in enumerate(self.layers):
+            if layer['name'] == name:
+                layer_index = i
+                break
+                
+        if layer_index > 0:  # 不是第一个图层
+            # 记录状态用于撤销/重做
+            self.record_state()
+            
+            # 交换图层
+            self.layers[layer_index], self.layers[layer_index - 1] = \
+                self.layers[layer_index - 1], self.layers[layer_index]
+                
+            self.modified = True
+            self._notify_layers_changed()
+            return True
+        return False
+    
+    def move_layer_down(self, name):
+        """下移图层"""
+        # 查找图层索引
+        layer_index = -1
+        for i, layer in enumerate(self.layers):
+            if layer['name'] == name:
+                layer_index = i
+                break
+                
+        if layer_index >= 0 and layer_index < len(self.layers) - 1:  # 不是最后一个图层
+            # 记录状态用于撤销/重做
+            self.record_state()
+            
+            # 交换图层
+            self.layers[layer_index], self.layers[layer_index + 1] = \
+                self.layers[layer_index + 1], self.layers[layer_index]
+                
+            self.modified = True
+            self._notify_layers_changed()
+            return True
+        return False
+    
+    def set_current_layer(self, name):
+        """设置当前图层"""
+        for layer in self.layers:
+            if layer['name'] == name:
+                self.current_layer = name
+                self._notify_layers_changed()
+                return True
+        return False
+    
+    def is_layer_visible(self, name):
+        """检查图层是否可见"""
+        for layer in self.layers:
+            if layer['name'] == name:
+                return layer['visible']
+        return False
+    
+    def set_layer_visibility(self, name, visible):
+        """设置图层可见性"""
+        for layer in self.layers:
+            if layer['name'] == name:
+                layer['visible'] = visible
+                self._notify_layers_changed()
+                self._notify_document_changed()
+                return True
+        return False
+    
+    def is_layer_locked(self, name):
+        """检查图层是否锁定"""
+        for layer in self.layers:
+            if layer['name'] == name:
+                return layer.get('locked', False)
+        return False
+    
+    def set_layer_locked(self, name, locked):
+        """设置图层锁定状态"""
+        for layer in self.layers:
+            if layer['name'] == name:
+                layer['locked'] = locked
+                self._notify_layers_changed()
+                return True
+        return False
+    
+    def get_layer_opacity(self, name):
+        """获取图层透明度"""
+        for layer in self.layers:
+            if layer['name'] == name:
+                return layer.get('opacity', 1.0)
+        return 1.0
+    
+    def set_layer_opacity(self, name, opacity):
+        """设置图层透明度"""
+        for layer in self.layers:
+            if layer['name'] == name:
+                layer['opacity'] = max(0.0, min(1.0, opacity))  # 限制在0-1范围内
+                self._notify_layers_changed()
+                self._notify_document_changed()
+                return True
+        return False
+    
+    def get_layer_names(self):
+        """获取所有图层名称"""
+        return [layer['name'] for layer in self.layers]
+    
+    def _notify_layers_changed(self):
+        """通知图层变化"""
+        if self.layers_changed:
+            self.layers_changed.emit()
+            
+    def _notify_document_changed(self):
+        """通知文档变化"""
+        if self.document_changed:
             self.document_changed.emit()
     
     # 文档操作
