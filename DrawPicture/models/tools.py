@@ -67,7 +67,7 @@ class SelectionTool(DrawingTool):
             point = event.pos()
             self.last_position = point
             self.moving = False
-
+            
             # 获取点击位置的图形
             shape = self.document.get_shape_at(point)
             

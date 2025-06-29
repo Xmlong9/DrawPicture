@@ -37,8 +37,17 @@ class Shape:
         
     def contains(self, point):
         """检查点是否在图形内，考虑变换"""
+        # 如果点在图形的边界矩形之外，快速返回False
+        # 先转换边界矩形到全局坐标
+        global_bounds = self._get_global_bounds()
+        
+        # 快速边界检查 - 如果点不在全局边界内，直接返回False
+        if not global_bounds.contains(point):
+            return False
+            
         # 将全局坐标点转换为图形的本地坐标
         local_point = self._transform_point_to_local(point)
+        
         # 交给子类判断点是否在图形内
         return self._contains_local(local_point)
         
@@ -56,6 +65,29 @@ class Shape:
             return point
         # 应用逆变换
         return inverted.map(point)
+        
+    def _get_global_bounds(self):
+        """获取图形在全局坐标系中的边界矩形"""
+        # 获取本地边界矩形，添加额外的边距使选择更容易
+        local_rect = self.bounding_rect()
+        
+        # 添加额外的边距，考虑笔宽
+        margin = max(10, self.pen.width())
+        local_rect = local_rect.adjusted(-margin, -margin, margin, margin)
+        
+        # 创建变换矩阵
+        transform = QTransform()
+        transform.translate(self.position.x(), self.position.y())
+        transform.rotate(self.rotation)
+        transform.scale(self.scale_factor, self.scale_factor)
+        
+        # 变换矩形的四个角点
+        path = QPainterPath()
+        path.addRect(local_rect)
+        transformed_path = transform.map(path)
+        
+        # 返回变换后路径的边界矩形
+        return transformed_path.boundingRect()
         
     def _contains_local(self, point):
         """检查本地坐标点是否在图形内，由子类实现"""
@@ -113,17 +145,32 @@ class Line(Shape):
         
     def _contains_local(self, point):
         """检查点是否在线段上或附近"""
-        line_path = QPainterPath()
-        line_path.moveTo(self.start_point)
-        line_path.lineTo(self.end_point)
+        # 计算点到线段的距离
+        x1, y1 = self.start_point.x(), self.start_point.y()
+        x2, y2 = self.end_point.x(), self.end_point.y()
+        x0, y0 = point.x(), point.y()
         
-        # 创建一个宽度为pen宽度的stroke path
-        stroke_path = QPainterPath()
-        stroke_pen = QPen(self.pen)
-        stroke_pen.setWidth(max(5, self.pen.width()))
-        stroke_path.addPath(line_path)
+        # 计算线段长度的平方
+        line_length_squared = (x2 - x1) ** 2 + (y2 - y1) ** 2
         
-        return stroke_path.contains(point)
+        # 如果线段长度为0，则直接计算点到起点的距离
+        if line_length_squared == 0:
+            distance = math.sqrt((x0 - x1) ** 2 + (y0 - y1) ** 2)
+            return distance <= max(5, self.pen.width() / 2)
+            
+        # 计算投影比例 t
+        t = max(0, min(1, ((x0 - x1) * (x2 - x1) + (y0 - y1) * (y2 - y1)) / line_length_squared))
+        
+        # 计算投影点坐标
+        proj_x = x1 + t * (x2 - x1)
+        proj_y = y1 + t * (y2 - y1)
+        
+        # 计算点到投影点的距离
+        distance = math.sqrt((x0 - proj_x) ** 2 + (y0 - proj_y) ** 2)
+        
+        # 判断距离是否在笔宽的一半以内
+        click_tolerance = max(5, self.pen.width() / 2)
+        return distance <= click_tolerance
         
     def bounding_rect(self):
         """获取直线的边界矩形"""
@@ -388,20 +435,41 @@ class Freehand(Shape):
         if len(self.points) < 2:
             return False
             
-        # 创建路径
-        path = QPainterPath()
-        path.moveTo(self.points[0])
+        # 设置点击容差
+        click_tolerance = max(5, self.pen.width() / 2)
         
+        # 检查点是否在任何线段附近
         for i in range(1, len(self.points)):
-            path.lineTo(self.points[i])
+            # 获取线段的起点和终点
+            x1, y1 = self.points[i-1].x(), self.points[i-1].y()
+            x2, y2 = self.points[i].x(), self.points[i].y()
+            x0, y0 = point.x(), point.y()
             
-        # 创建一个宽度为pen宽度的stroke path
-        stroke_path = QPainterPath()
-        stroke_pen = QPen(self.pen)
-        stroke_pen.setWidth(max(5, self.pen.width()))
-        stroke_path.addPath(path)
-        
-        return stroke_path.contains(point)
+            # 计算线段长度的平方
+            line_length_squared = (x2 - x1) ** 2 + (y2 - y1) ** 2
+            
+            # 如果线段长度为0，则直接计算点到起点的距离
+            if line_length_squared == 0:
+                distance = math.sqrt((x0 - x1) ** 2 + (y0 - y1) ** 2)
+                if distance <= click_tolerance:
+                    return True
+                continue
+                
+            # 计算投影比例 t
+            t = max(0, min(1, ((x0 - x1) * (x2 - x1) + (y0 - y1) * (y2 - y1)) / line_length_squared))
+            
+            # 计算投影点坐标
+            proj_x = x1 + t * (x2 - x1)
+            proj_y = y1 + t * (y2 - y1)
+            
+            # 计算点到投影点的距离
+            distance = math.sqrt((x0 - proj_x) ** 2 + (y0 - proj_y) ** 2)
+            
+            # 判断距离是否在容差范围内
+            if distance <= click_tolerance:
+                return True
+                
+        return False
         
     def bounding_rect(self):
         """获取自由绘制线条的边界矩形"""
