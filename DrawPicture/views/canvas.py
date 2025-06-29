@@ -2,7 +2,7 @@
 # -*- coding: utf-8 -*-
 
 from PyQt5.QtWidgets import QWidget
-from PyQt5.QtGui import QPainter, QPen, QBrush, QColor, QPainterPath
+from PyQt5.QtGui import QPainter, QPen, QBrush, QColor, QPainterPath, QCursor
 from PyQt5.QtCore import Qt, QPoint, QPointF, QRectF, pyqtSignal, QTime, QTimer
 
 class Canvas(QWidget):
@@ -10,27 +10,47 @@ class Canvas(QWidget):
     
     # 自定义信号
     status_message = pyqtSignal(str)  # 状态消息信号
+    zoom_changed = pyqtSignal(float)  # 添加缩放变化信号
     
     def __init__(self, document, parent=None):
+        """初始化画布"""
         super().__init__(parent)
-        self.document = document
-        self.current_tool = None
-        self.grid_visible = False
-        self.grid_size = 20
-        self.zoom_factor = 1.0
-        self.pan_offset = QPoint(0, 0)
-        self.last_pan_update = None  # 上次平移更新时间
-        self.min_update_interval = 16  # 最小更新间隔(毫秒)，约60fps
         
-        # 绑定文档信号
-        self.document.document_changed.connect(self.update)
-        self.document.selection_changed.connect(self.update)
+        # 存储文档引用
+        self.document = document
+        
+        # 设置焦点策略，以便接收键盘事件
+        self.setFocusPolicy(Qt.StrongFocus)
         
         # 设置鼠标追踪
         self.setMouseTracking(True)
         
-        # 设置焦点策略，允许接收键盘事件
-        self.setFocusPolicy(Qt.StrongFocus)
+        # 设置画布属性
+        self.current_tool = None  # 当前工具
+        self.zoom_factor = 1.0  # 缩放因子
+        self.pan_offset = QPoint(0, 0)  # 平移偏移量
+        self.is_panning = False  # 是否正在平移
+        self.last_pan_pos = None  # 上次平移位置
+        
+        # 网格设置
+        self.grid_visible = False  # 默认不显示网格
+        self.grid_size = 20  # 网格大小
+        self.grid_color = QColor(220, 220, 220)  # 网格颜色
+        
+        # 设置画布背景色
+        self.background_color = Qt.white
+        p = self.palette()
+        p.setColor(self.backgroundRole(), self.background_color)
+        self.setPalette(p)
+        
+        # 缩放设置
+        self.min_zoom = 0.1
+        self.max_zoom = 5.0
+        self.zoom_step = 0.1
+        
+        # 绑定文档信号
+        self.document.document_changed.connect(self.update)
+        self.document.selection_changed.connect(self.update)
         
         # 设置画布属性
         self.setAttribute(Qt.WA_StaticContents)
@@ -49,50 +69,118 @@ class Canvas(QWidget):
         self.setCursor(tool.get_cursor())
         
     def paintEvent(self, event):
-        """绘制事件"""
+        """绘制事件处理"""
         painter = QPainter(self)
         painter.setRenderHint(QPainter.Antialiasing)
+        
+        # 设置背景色
+        painter.fillRect(self.rect(), self.background_color)
+        
+        # 先绘制网格（在坐标变换之前，确保网格覆盖整个可见区域）
+        if self.grid_visible:
+            self.draw_grid(painter)
         
         # 应用缩放和平移
         painter.translate(self.pan_offset)
         painter.scale(self.zoom_factor, self.zoom_factor)
         
-        # 绘制网格
-        if self.grid_visible:
-            self._draw_grid(painter)
-        
         # 绘制所有图形
         for shape in self.document.shapes:
-            # 检查图层是否可见
-            if shape.z_value < len(self.document.layers) and self.document.layers[shape.z_value]['visible']:
+            # 跳过不可见图层中的图形
+            if self.document.is_layer_visible(shape.layer):
+                # 保存画家状态
+                painter.save()
+                
+                # 绘制图形
                 shape.paint(painter)
+                
+                # 恢复画家状态
+                painter.restore()
+                
+        # 绘制选择框
+        for shape in self.document.selected_shapes:
+            if self.document.is_layer_visible(shape.layer):
+                painter.save()
+                self.draw_selection_handles(painter, shape)
+                painter.restore()
                 
         # 绘制当前正在创建的图形
         if self.current_tool and self.current_tool.current_shape:
             self.current_tool.current_shape.paint(painter)
             
-    def _draw_grid(self, painter):
-        """绘制网格"""
-        pen = QPen(QColor(200, 200, 200))
+    def draw_grid(self, painter):
+        """绘制网格 - 在视图坐标系中绘制，不受平移和缩放影响"""
+        pen = QPen(self.grid_color)
         pen.setStyle(Qt.DotLine)
         painter.setPen(pen)
         
-        # 计算当前可见区域
-        rect = self.rect()
-        top_left = self.mapToScene(rect.topLeft())
-        bottom_right = self.mapToScene(rect.bottomRight())
+        # 计算可见区域
+        width = self.width()
+        height = self.height()
+        
+        # 计算网格线的间距（考虑缩放）
+        grid_spacing = self.grid_size * self.zoom_factor
+        
+        # 计算起始位置（考虑偏移）
+        offset_x = self.pan_offset.x()
+        offset_y = self.pan_offset.y()
+        
+        # 计算第一条网格线的位置
+        start_x = offset_x % grid_spacing
+        if start_x < 0:
+            start_x += grid_spacing
+        
+        start_y = offset_y % grid_spacing
+        if start_y < 0:
+            start_y += grid_spacing
         
         # 绘制垂直线
-        x = int(top_left.x() / self.grid_size) * self.grid_size
-        while x <= bottom_right.x():
-            painter.drawLine(x, top_left.y(), x, bottom_right.y())
-            x += self.grid_size
+        x = start_x
+        while x < width:
+            painter.drawLine(int(x), 0, int(x), height)
+            x += grid_spacing
             
         # 绘制水平线
-        y = int(top_left.y() / self.grid_size) * self.grid_size
-        while y <= bottom_right.y():
-            painter.drawLine(top_left.x(), y, bottom_right.x(), y)
-            y += self.grid_size
+        y = start_y
+        while y < height:
+            painter.drawLine(0, int(y), width, int(y))
+            y += grid_spacing
+        
+    def draw_selection_handles(self, painter, shape):
+        """绘制选择手柄"""
+        from PyQt5.QtCore import QRectF
+        
+        # 获取图形在全局坐标系中的边界矩形
+        rect = shape._get_global_bounds()
+        
+        # 设置选择框的笔
+        pen = QPen(Qt.blue)
+        pen.setStyle(Qt.DashLine)
+        painter.setPen(pen)
+        painter.setBrush(Qt.NoBrush)
+        
+        # 绘制选择框
+        painter.drawRect(rect)
+        
+        # 设置手柄的笔和刷子
+        painter.setPen(Qt.black)
+        painter.setBrush(QBrush(Qt.white))
+        
+        # 绘制手柄
+        handle_size = 6 / self.zoom_factor  # 调整手柄大小以适应缩放
+        half_handle = handle_size / 2
+        
+        # 角落手柄
+        painter.drawRect(QRectF(rect.left() - half_handle, rect.top() - half_handle, handle_size, handle_size))
+        painter.drawRect(QRectF(rect.right() - half_handle, rect.top() - half_handle, handle_size, handle_size))
+        painter.drawRect(QRectF(rect.left() - half_handle, rect.bottom() - half_handle, handle_size, handle_size))
+        painter.drawRect(QRectF(rect.right() - half_handle, rect.bottom() - half_handle, handle_size, handle_size))
+        
+        # 中点手柄
+        painter.drawRect(QRectF(rect.left() - half_handle, rect.top() + rect.height() / 2 - half_handle, handle_size, handle_size))
+        painter.drawRect(QRectF(rect.right() - half_handle, rect.top() + rect.height() / 2 - half_handle, handle_size, handle_size))
+        painter.drawRect(QRectF(rect.left() + rect.width() / 2 - half_handle, rect.top() - half_handle, handle_size, handle_size))
+        painter.drawRect(QRectF(rect.left() + rect.width() / 2 - half_handle, rect.bottom() - half_handle, handle_size, handle_size))
             
     def mapToScene(self, point):
         """将窗口坐标映射到场景坐标"""
@@ -124,6 +212,7 @@ class Canvas(QWidget):
             scene_event = type(event)(event.type(), scene_pos, event.button(),
                                    event.buttons(), event.modifiers())
             self.current_tool.mouse_move(scene_event)
+            # 强制重绘画布，确保选择框随图形移动
             self.update()
             
     def mouseReleaseEvent(self, event):
@@ -133,23 +222,21 @@ class Canvas(QWidget):
             scene_event = type(event)(event.type(), scene_pos, event.button(),
                                    event.buttons(), event.modifiers())
             self.current_tool.mouse_release(scene_event)
+            # 强制重绘画布，确保选择框位置更新
             self.update()
             
     def wheelEvent(self, event):
         """鼠标滚轮事件 - 用于缩放"""
         if event.modifiers() & Qt.ControlModifier:
-            # 计算缩放因子
-            factor = 1.1
-            if event.angleDelta().y() < 0:
-                factor = 1.0 / factor
-                
-            # 应用缩放
-            old_zoom = self.zoom_factor
-            self.zoom_factor *= factor
-            self.zoom_factor = max(0.1, min(10.0, self.zoom_factor))  # 限制缩放范围
-            
-            # 更新画布
-            self.update()
+            # 放大或缩小
+            if event.angleDelta().y() > 0:
+                self.zoom_in()
+            else:
+                self.zoom_out()
+            event.accept()
+        else:
+            # 默认滚动行为
+            super().wheelEvent(event)
             
     def keyPressEvent(self, event):
         """键盘事件处理"""
@@ -169,13 +256,11 @@ class Canvas(QWidget):
         elif event.key() == Qt.Key_Y and event.modifiers() & Qt.ControlModifier:
             self.document.redo()
             
-    def toggle_grid(self, visible=None):
-        """切换网格显示"""
-        if visible is None:
-            self.grid_visible = not self.grid_visible
-        else:
-            self.grid_visible = visible
+    def toggle_grid(self):
+        """切换网格显示状态"""
+        self.grid_visible = not self.grid_visible
         self.update()
+        return self.grid_visible
         
     def set_grid_size(self, size):
         """设置网格大小"""
@@ -185,21 +270,27 @@ class Canvas(QWidget):
             
     def zoom_in(self):
         """放大"""
-        self.zoom_factor *= 1.2
-        self.zoom_factor = min(10.0, self.zoom_factor)  # 限制最大缩放
+        if self.zoom_factor < self.max_zoom:
+            self.zoom_factor = min(self.zoom_factor + self.zoom_step, self.max_zoom)
+            self.zoom_changed.emit(self.zoom_factor)
         self.update()
+        self.status_message.emit(f"缩放: {int(self.zoom_factor * 100)}%")
         
     def zoom_out(self):
         """缩小"""
-        self.zoom_factor /= 1.2
-        self.zoom_factor = max(0.1, self.zoom_factor)  # 限制最小缩放
+        if self.zoom_factor > self.min_zoom:
+            self.zoom_factor = max(self.zoom_factor - self.zoom_step, self.min_zoom)
+            self.zoom_changed.emit(self.zoom_factor)
         self.update()
+        self.status_message.emit(f"缩放: {int(self.zoom_factor * 100)}%")
         
     def zoom_reset(self):
         """重置缩放"""
         self.zoom_factor = 1.0
         self.pan_offset = QPoint(0, 0)
+        self.zoom_changed.emit(self.zoom_factor)
         self.update()
+        self.status_message.emit("缩放重置为 100%")
         
     def pan_canvas(self, dx, dy):
         """平移画布"""
@@ -224,4 +315,18 @@ class Canvas(QWidget):
         # 更新状态栏坐标
         center = QPointF(self.width()/2, self.height()/2)
         scene_center = self.mapToScene(center.toPoint())
-        self.status_message.emit(f"中心坐标: ({int(scene_center.x())}, {int(scene_center.y())})") 
+        self.status_message.emit(f"中心坐标: ({int(scene_center.x())}, {int(scene_center.y())})")
+        
+    def screen_to_world(self, screen_x, screen_y):
+        """将屏幕坐标转换为世界坐标"""
+        # 考虑平移和缩放
+        world_x = (screen_x - self.pan_offset.x()) / self.zoom_factor
+        world_y = (screen_y - self.pan_offset.y()) / self.zoom_factor
+        return world_x, world_y
+        
+    def world_to_screen(self, world_x, world_y):
+        """将世界坐标转换为屏幕坐标"""
+        # 考虑平移和缩放
+        screen_x = world_x * self.zoom_factor + self.pan_offset.x()
+        screen_y = world_y * self.zoom_factor + self.pan_offset.y()
+        return screen_x, screen_y 

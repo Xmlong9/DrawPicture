@@ -1,12 +1,17 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
 
+import os
 from PyQt5.QtWidgets import (QWidget, QVBoxLayout, QHBoxLayout, QPushButton, QLabel, 
                             QColorDialog, QSlider, QComboBox, QGroupBox, QListWidget,
                             QListWidgetItem, QSpinBox, QCheckBox, QToolButton, QMenu,
-                            QAction, QInputDialog)
-from PyQt5.QtGui import QIcon, QColor, QPainter, QPixmap, QPen, QBrush
-from PyQt5.QtCore import Qt, QSize, pyqtSignal
+                            QAction, QInputDialog, QGridLayout, QFormLayout, QMessageBox,
+                            QLineEdit, QAbstractItemView, QScrollArea, QSizePolicy, QFrame)
+from PyQt5.QtGui import QIcon, QColor, QPainter, QPixmap, QPen, QBrush, QPalette
+from PyQt5.QtCore import Qt, QSize, pyqtSignal, QTimer
+
+from DrawPicture.models.document import DrawingDocument
+from DrawPicture.models.tools import ToolType
 
 class ToolPanel(QWidget):
     """工具面板"""
@@ -20,32 +25,37 @@ class ToolPanel(QWidget):
     def init_ui(self):
         """初始化UI"""
         layout = QVBoxLayout(self)
+        layout.setSpacing(10)
+        layout.setContentsMargins(10, 10, 10, 10)
         
         # 创建工具按钮组
-        tools_group = QGroupBox("工具")
+        tools_group = QGroupBox("工具箱")
+        tools_group.setMinimumWidth(120)  # 设置最小宽度
         tools_layout = QVBoxLayout()
+        tools_layout.setSpacing(8)
+        tools_layout.setContentsMargins(10, 15, 10, 10)  # 增加内边距
         
-        # 创建工具按钮
-        self.selection_btn = self._create_tool_button("选择", "selection")
-        self.pan_btn = self._create_tool_button("平移", "pan")  # 添加平移工具按钮
-        self.line_btn = self._create_tool_button("直线", "line")
-        self.rectangle_btn = self._create_tool_button("矩形", "rectangle")
-        self.circle_btn = self._create_tool_button("圆形", "circle")
-        self.freehand_btn = self._create_tool_button("自由绘制", "freehand")
-        self.spiral_btn = self._create_tool_button("螺线", "spiral")
-        self.sine_btn = self._create_tool_button("正弦曲线", "sine")
-        self.eraser_btn = self._create_tool_button("橡皮擦", "eraser")  # 添加橡皮擦按钮
+        # 创建工具按钮并添加图标
+        self.selection_btn = self._create_tool_button("选择", "selection", "⬚")
+        self.pan_btn = self._create_tool_button("平移", "pan", "✋")
+        self.line_btn = self._create_tool_button("直线", "line", "╱")
+        self.rectangle_btn = self._create_tool_button("矩形", "rectangle", "□")
+        self.circle_btn = self._create_tool_button("圆形", "circle", "○")
+        self.freehand_btn = self._create_tool_button("自由绘制", "freehand", "✎")
+        self.spiral_btn = self._create_tool_button("螺线", "spiral", "@")
+        self.sine_btn = self._create_tool_button("正弦曲线", "sine", "~")
+        self.eraser_btn = self._create_tool_button("橡皮擦", "eraser", "☒")
         
         # 将按钮添加到布局
         tools_layout.addWidget(self.selection_btn)
-        tools_layout.addWidget(self.pan_btn)  # 添加平移工具按钮到布局
+        tools_layout.addWidget(self.pan_btn)
         tools_layout.addWidget(self.line_btn)
         tools_layout.addWidget(self.rectangle_btn)
         tools_layout.addWidget(self.circle_btn)
         tools_layout.addWidget(self.freehand_btn)
         tools_layout.addWidget(self.spiral_btn)
         tools_layout.addWidget(self.sine_btn)
-        tools_layout.addWidget(self.eraser_btn)  # 添加橡皮擦按钮到布局
+        tools_layout.addWidget(self.eraser_btn)
         tools_layout.addStretch(1)
         
         tools_group.setLayout(tools_layout)
@@ -58,11 +68,39 @@ class ToolPanel(QWidget):
         self.selection_btn.setChecked(True)
         self.current_tool = "selection"
         
-    def _create_tool_button(self, text, tool_name):
+    def _create_tool_button(self, text, tool_name, icon_text=""):
         """创建工具按钮"""
-        button = QPushButton(text)
+        button = QPushButton()
         button.setCheckable(True)
+        button.setFixedHeight(36)
+        
+        # 创建图标
+        if icon_text:
+            pixmap = QPixmap(32, 32)
+            pixmap.fill(Qt.transparent)
+            
+            painter = QPainter(pixmap)
+            painter.setRenderHint(QPainter.Antialiasing)
+            painter.setPen(QPen(Qt.black, 2))
+            
+            # 绘制图标文本
+            font = painter.font()
+            font.setPointSize(16)
+            painter.setFont(font)
+            painter.drawText(pixmap.rect(), Qt.AlignCenter, icon_text)
+            
+            painter.end()
+            
+            button.setIcon(QIcon(pixmap))
+            button.setIconSize(QSize(24, 24))
+        
+        # 设置文本和布局
+        button.setText(text)
+        button.setToolTip(f"{text}工具")
+        
+        # 连接信号
         button.clicked.connect(lambda checked, t=tool_name: self._on_tool_clicked(t))
+        
         return button
         
     def _on_tool_clicked(self, tool_name):
@@ -123,58 +161,123 @@ class ColorPanel(QWidget):
     def init_ui(self):
         """初始化UI"""
         layout = QVBoxLayout(self)
+        layout.setSpacing(10)
+        layout.setContentsMargins(10, 10, 10, 10)
         
         # 创建颜色选择组
-        color_group = QGroupBox("颜色")
+        color_group = QGroupBox("颜色与样式")
+        color_group.setMinimumWidth(120)  # 设置最小宽度
         color_layout = QVBoxLayout()
+        color_layout.setSpacing(10)
+        color_layout.setContentsMargins(10, 15, 10, 10)  # 增加内边距
+        
+        # 颜色选择器区域
+        color_selector_layout = QHBoxLayout()
         
         # 线条颜色选择器
-        pen_layout = QHBoxLayout()
-        pen_layout.addWidget(QLabel("线条:"))
+        pen_layout = QVBoxLayout()
+        pen_layout.setAlignment(Qt.AlignCenter)
+        pen_label = QLabel("线条颜色")
+        pen_label.setAlignment(Qt.AlignCenter)
+        pen_layout.addWidget(pen_label)
+        
         self.pen_color_btn = QPushButton()
-        self.pen_color_btn.setFixedSize(30, 30)
+        self.pen_color_btn.setFixedSize(40, 40)
+        self.pen_color_btn.setCursor(Qt.PointingHandCursor)
         self._update_color_button(self.pen_color_btn, self.pen_color)
         self.pen_color_btn.clicked.connect(self._on_pen_color_clicked)
+        self.pen_color_btn.setToolTip("点击选择线条颜色")
         pen_layout.addWidget(self.pen_color_btn)
-        color_layout.addLayout(pen_layout)
+        color_selector_layout.addLayout(pen_layout)
         
-        # 填充颜色选择器 - 设置更醒目的标签
-        fill_layout = QHBoxLayout()
-        fill_label = QLabel("填充:")  # 普通文本，不使用HTML
+        # 分隔线
+        line = QWidget()
+        line.setFixedWidth(1)
+        line.setStyleSheet("background-color: #c0c0c0;")
+        color_selector_layout.addWidget(line)
+        
+        # 填充颜色选择器
+        fill_layout = QVBoxLayout()
+        fill_layout.setAlignment(Qt.AlignCenter)
+        fill_label = QLabel("填充颜色")
+        fill_label.setAlignment(Qt.AlignCenter)
         fill_layout.addWidget(fill_label)
+        
         self.fill_color_btn = QPushButton()
-        self.fill_color_btn.setFixedSize(30, 30)
-        self.fill_color_btn.setToolTip("设置图形填充颜色")
+        self.fill_color_btn.setFixedSize(40, 40)
+        self.fill_color_btn.setCursor(Qt.PointingHandCursor)
         self._update_color_button(self.fill_color_btn, self.fill_color)
         self.fill_color_btn.clicked.connect(self._on_fill_color_clicked)
+        self.fill_color_btn.setToolTip("点击选择填充颜色")
         fill_layout.addWidget(self.fill_color_btn)
-        color_layout.addLayout(fill_layout)
+        color_selector_layout.addLayout(fill_layout)
         
-        # 预定义颜色列表
-        predefined_layout = QHBoxLayout()
+        color_layout.addLayout(color_selector_layout)
+        
+        # 分隔线
+        h_line = QWidget()
+        h_line.setFixedHeight(1)
+        h_line.setStyleSheet("background-color: #c0c0c0;")
+        color_layout.addWidget(h_line)
+        
+        # 预定义颜色调色板
+        palette_label = QLabel("调色板")
+        palette_label.setAlignment(Qt.AlignCenter)
+        color_layout.addWidget(palette_label)
+        
+        # 预定义颜色列表 - 扩展更多颜色
+        predefined_layout = QGridLayout()
+        predefined_layout.setSpacing(4)
         self.predefined_colors = [
             QColor(0, 0, 0),       # 黑色
+            QColor(128, 128, 128), # 灰色
             QColor(255, 255, 255), # 白色
             QColor(255, 0, 0),     # 红色
-            QColor(0, 255, 0),     # 绿色
-            QColor(0, 0, 255),     # 蓝色
+            QColor(255, 165, 0),   # 橙色
             QColor(255, 255, 0),   # 黄色
+            QColor(0, 255, 0),     # 绿色
             QColor(0, 255, 255),   # 青色
+            QColor(0, 0, 255),     # 蓝色
+            QColor(128, 0, 128),   # 紫色
             QColor(255, 0, 255),   # 洋红
+            QColor(165, 42, 42),   # 棕色
         ]
         
+        row, col = 0, 0
         for color in self.predefined_colors:
             color_btn = QPushButton()
-            color_btn.setFixedSize(20, 20)
+            color_btn.setFixedSize(24, 24)
+            color_btn.setCursor(Qt.PointingHandCursor)
             self._update_color_button(color_btn, color)
             color_btn.clicked.connect(lambda checked, c=color: self._on_predefined_color_clicked(c))
-            predefined_layout.addWidget(color_btn)
+            
+            # 设置工具提示显示颜色值
+            r, g, b, a = color.getRgb()
+            color_btn.setToolTip(f"RGB: {r},{g},{b}")
+            
+            predefined_layout.addWidget(color_btn, row, col)
+            col += 1
+            if col > 3:  # 4列布局
+                col = 0
+                row += 1
             
         color_layout.addLayout(predefined_layout)
         
+        # 分隔线
+        h_line2 = QWidget()
+        h_line2.setFixedHeight(1)
+        h_line2.setStyleSheet("background-color: #c0c0c0;")
+        color_layout.addWidget(h_line2)
+        
         # 线宽选择
-        line_width_layout = QHBoxLayout()
-        line_width_layout.addWidget(QLabel("线宽:"))
+        line_width_layout = QVBoxLayout()
+        line_width_header = QHBoxLayout()
+        line_width_header.addWidget(QLabel("线宽:"))
+        self.line_width_label = QLabel("2")
+        self.line_width_label.setAlignment(Qt.AlignRight)
+        line_width_header.addWidget(self.line_width_label)
+        line_width_layout.addLayout(line_width_header)
+        
         self.line_width_slider = QSlider(Qt.Horizontal)
         self.line_width_slider.setRange(1, 20)
         self.line_width_slider.setValue(2)
@@ -182,26 +285,7 @@ class ColorPanel(QWidget):
         self.line_width_slider.setTickInterval(2)
         self.line_width_slider.valueChanged.connect(self._on_line_width_changed)
         line_width_layout.addWidget(self.line_width_slider)
-        self.line_width_label = QLabel("2")
-        line_width_layout.addWidget(self.line_width_label)
         color_layout.addLayout(line_width_layout)
-        
-        # 橡皮擦大小选择（默认隐藏）
-        self.eraser_size_widget = QWidget()
-        eraser_size_layout = QHBoxLayout(self.eraser_size_widget)
-        eraser_size_layout.setContentsMargins(0, 0, 0, 0)
-        eraser_size_layout.addWidget(QLabel("橡皮擦大小:"))
-        self.eraser_size_slider = QSlider(Qt.Horizontal)
-        self.eraser_size_slider.setRange(5, 50)
-        self.eraser_size_slider.setValue(self.eraser_size)
-        self.eraser_size_slider.setTickPosition(QSlider.TicksBelow)
-        self.eraser_size_slider.setTickInterval(5)
-        self.eraser_size_slider.valueChanged.connect(self._on_eraser_size_changed)
-        eraser_size_layout.addWidget(self.eraser_size_slider)
-        self.eraser_size_label = QLabel(str(self.eraser_size))
-        eraser_size_layout.addWidget(self.eraser_size_label)
-        color_layout.addWidget(self.eraser_size_widget)
-        self.eraser_size_widget.hide()  # 默认隐藏
         
         # 线型选择
         line_style_layout = QHBoxLayout()
@@ -215,6 +299,29 @@ class ColorPanel(QWidget):
         line_style_layout.addWidget(self.line_style_combo)
         color_layout.addLayout(line_style_layout)
         
+        # 橡皮擦大小选择（默认隐藏）
+        self.eraser_size_widget = QWidget()
+        eraser_size_layout = QVBoxLayout(self.eraser_size_widget)
+        eraser_size_layout.setContentsMargins(0, 0, 0, 0)
+        
+        eraser_header = QHBoxLayout()
+        eraser_header.addWidget(QLabel("橡皮擦大小:"))
+        self.eraser_size_label = QLabel(str(self.eraser_size))
+        self.eraser_size_label.setAlignment(Qt.AlignRight)
+        eraser_header.addWidget(self.eraser_size_label)
+        eraser_size_layout.addLayout(eraser_header)
+        
+        self.eraser_size_slider = QSlider(Qt.Horizontal)
+        self.eraser_size_slider.setRange(5, 50)
+        self.eraser_size_slider.setValue(self.eraser_size)
+        self.eraser_size_slider.setTickPosition(QSlider.TicksBelow)
+        self.eraser_size_slider.setTickInterval(5)
+        self.eraser_size_slider.valueChanged.connect(self._on_eraser_size_changed)
+        eraser_size_layout.addWidget(self.eraser_size_slider)
+        
+        color_layout.addWidget(self.eraser_size_widget)
+        self.eraser_size_widget.hide()  # 默认隐藏
+        
         color_group.setLayout(color_layout)
         
         # 将颜色组添加到主布局
@@ -223,8 +330,35 @@ class ColorPanel(QWidget):
         
     def _update_color_button(self, button, color):
         """更新颜色按钮样式"""
+        # 创建一个新的pixmap
         pixmap = QPixmap(button.size())
-        pixmap.fill(color)
+        pixmap.fill(Qt.transparent)
+        
+        # 创建painter
+        painter = QPainter(pixmap)
+        painter.setRenderHint(QPainter.Antialiasing)
+        
+        # 绘制颜色区域（带圆角和边框）
+        painter.setPen(QPen(Qt.gray, 1))
+        
+        # 如果是透明色，绘制特殊标记
+        if color.alpha() == 0:
+            # 绘制透明背景格子
+            bg_brush = QBrush(QColor(230, 230, 230))
+            painter.setBrush(bg_brush)
+            painter.drawRoundedRect(0, 0, pixmap.width() - 1, pixmap.height() - 1, 4, 4)
+            
+            # 绘制红色斜线表示透明
+            painter.setPen(QPen(Qt.red, 2))
+            painter.drawLine(0, pixmap.height() - 1, pixmap.width() - 1, 0)
+        else:
+            # 普通颜色
+            painter.setBrush(QBrush(color))
+            painter.drawRoundedRect(0, 0, pixmap.width() - 1, pixmap.height() - 1, 4, 4)
+        
+        painter.end()
+        
+        # 设置按钮图标
         button.setIcon(QIcon(pixmap))
         button.setIconSize(button.size())
         
@@ -269,6 +403,12 @@ class ColorPanel(QWidget):
         style = self.line_style_combo.itemData(index)
         self.line_style_changed.emit(style)
         
+    def _on_eraser_size_changed(self, value):
+        """橡皮擦大小变化处理"""
+        self.eraser_size = value
+        self.eraser_size_label.setText(str(value))
+        self.eraser_size_changed.emit(value)
+
     def set_current_tool(self, tool_name):
         """设置当前工具"""
         self.current_tool = tool_name
@@ -283,163 +423,517 @@ class ColorPanel(QWidget):
         else:
             self.eraser_size_widget.hide()
         
-    def _on_eraser_size_changed(self, value):
-        """橡皮擦大小变化处理"""
-        self.eraser_size = value
-        self.eraser_size_label.setText(str(value))
-        self.eraser_size_changed.emit(value)
-
 
 class LayerPanel(QWidget):
     """图层面板"""
     
-    layer_selected = pyqtSignal(int)  # 图层选择信号
-    layer_visibility_changed = pyqtSignal(int, bool)  # 图层可见性变化信号
+    # 定义信号
+    layer_changed = pyqtSignal(str)
     
-    def __init__(self, document, parent=None):
-        super().__init__(parent)
+    def __init__(self, document: DrawingDocument):
+        super().__init__()
+        
         self.document = document
+        
+        # 初始化UI
         self.init_ui()
         
-        # 绑定文档信号
-        self.document.document_changed.connect(self.update_layer_list)
+        # 连接文档信号
+        self.document.layers_changed.connect(self.update_layer_list)
+        
+        # 禁止初始选择信号
+        self.layer_list.blockSignals(True)
+        
+        # 初始更新图层列表
+        self.update_layer_list()
+        
+        # 恢复信号
+        self.layer_list.blockSignals(False)
         
     def init_ui(self):
         """初始化UI"""
-        layout = QVBoxLayout(self)
+        # 创建主布局
+        main_layout = QVBoxLayout(self)
+        main_layout.setContentsMargins(5, 5, 5, 5)
+        main_layout.setSpacing(5)  # 减少布局间距
         
-        # 创建图层列表组
-        layers_group = QGroupBox("图层")
-        layers_layout = QVBoxLayout()
+        # 添加标题标签
+        title_label = QLabel("图层管理")
+        title_label.setStyleSheet("font-weight: bold; font-size: 14px; padding: 5px;")
+        title_label.setAlignment(Qt.AlignCenter)
+        title_label.setMinimumWidth(120)  # 设置最小宽度
+        main_layout.addWidget(title_label)
         
-        # 图层列表
+        # 创建图层列表
         self.layer_list = QListWidget()
-        self.layer_list.itemClicked.connect(self._on_layer_clicked)
-        layers_layout.addWidget(self.layer_list)
+        self.layer_list.setSelectionMode(QAbstractItemView.SingleSelection)
+        self.layer_list.setMinimumWidth(120)  # 设置最小宽度
+        self.layer_list.setMinimumHeight(300)  # 设置最小高度，使图层列表更长
+        self.layer_list.setStyleSheet("""
+            QListWidget {
+                border: 1px solid #c0c0c0;
+                border-radius: 4px;
+                background-color: white;
+                padding: 2px;
+            }
+            QListWidget::item {
+                padding: 3px;
+                border-bottom: 1px solid #f0f0f0;
+                min-height: 25px;
+            }
+            QListWidget::item:selected {
+                background-color: #e0e8f0;
+                color: black;
+                border: 1px solid #a0a0a0;
+                border-radius: 3px;
+            }
+            QListWidget::item:hover {
+                background-color: #f0f8ff;
+            }
+        """)
+        self.layer_list.itemSelectionChanged.connect(self.on_layer_selected)
+        self.layer_list.itemChanged.connect(self.on_layer_item_changed)
+        main_layout.addWidget(self.layer_list, 1)  # 设置拉伸因子为1，使列表占据更多空间
         
-        # 图层操作按钮
-        buttons_layout = QHBoxLayout()
+        # 创建按钮布局
+        button_layout = QHBoxLayout()
+        button_layout.setSpacing(5)
         
-        self.add_layer_btn = QPushButton("添加")
-        self.add_layer_btn.clicked.connect(self._on_add_layer)
-        buttons_layout.addWidget(self.add_layer_btn)
+        # 添加图层按钮
+        self.add_layer_button = self._create_icon_button("添加新图层", "add")
+        self.add_layer_button.clicked.connect(self.on_add_layer)
+        button_layout.addWidget(self.add_layer_button)
         
-        self.rename_layer_btn = QPushButton("重命名")
-        self.rename_layer_btn.clicked.connect(self._on_rename_layer)
-        buttons_layout.addWidget(self.rename_layer_btn)
+        # 删除图层按钮
+        self.remove_layer_button = self._create_icon_button("删除选中图层", "remove")
+        self.remove_layer_button.clicked.connect(self.on_remove_layer)
+        button_layout.addWidget(self.remove_layer_button)
         
-        self.delete_layer_btn = QPushButton("删除")
-        self.delete_layer_btn.clicked.connect(self._on_delete_layer)
-        buttons_layout.addWidget(self.delete_layer_btn)
+        # 上移图层按钮
+        self.move_up_button = self._create_icon_button("上移图层", "up")
+        self.move_up_button.clicked.connect(self.on_move_layer_up)
+        button_layout.addWidget(self.move_up_button)
         
-        layers_layout.addLayout(buttons_layout)
+        # 下移图层按钮
+        self.move_down_button = self._create_icon_button("下移图层", "down")
+        self.move_down_button.clicked.connect(self.on_move_layer_down)
+        button_layout.addWidget(self.move_down_button)
         
-        layers_group.setLayout(layers_layout)
+        # 重命名图层按钮
+        self.rename_layer_button = self._create_icon_button("重命名图层", "rename")
+        self.rename_layer_button.clicked.connect(self.on_rename_layer)
+        button_layout.addWidget(self.rename_layer_button)
         
-        # 将图层组添加到主布局
-        layout.addWidget(layers_group)
-        layout.addStretch(1)
+        main_layout.addLayout(button_layout)
         
-        # 初始化图层列表
-        self.update_layer_list()
+        # 添加底部空间
+        main_layout.addStretch(1)
+        
+    def _create_icon_button(self, tooltip, icon_type):
+        """创建带图标的按钮"""
+        button = QPushButton()
+        button.setToolTip(tooltip)
+        button.setFixedSize(32, 32)  # 增加按钮大小
+        button.setStyleSheet("""
+            QPushButton {
+                border: 1px solid #c0c0c0;
+                border-radius: 4px;
+                background-color: #f8f8f8;
+            }
+            QPushButton:hover {
+                background-color: #e8e8e8;
+            }
+            QPushButton:pressed {
+                background-color: #d0d0d0;
+            }
+            QPushButton:focus {
+                border: 2px solid #a0a0a0;
+                outline: none;
+            }
+        """)
+        
+        # 创建图标
+        pixmap = QPixmap(20, 20)  # 增加图标大小
+        pixmap.fill(Qt.transparent)
+        
+        painter = QPainter(pixmap)
+        painter.setRenderHint(QPainter.Antialiasing)
+        
+        # 根据类型绘制不同的图标
+        if icon_type == "add":
+            painter.setPen(QPen(Qt.black, 2))
+            painter.drawLine(10, 5, 10, 15)
+            painter.drawLine(5, 10, 15, 10)
+        elif icon_type == "remove":
+            painter.setPen(QPen(Qt.black, 2))
+            painter.drawLine(5, 10, 15, 10)
+        elif icon_type == "up":
+            painter.setPen(QPen(Qt.black, 2))
+            painter.drawLine(10, 5, 10, 15)
+            painter.drawLine(5, 10, 10, 5)
+            painter.drawLine(10, 5, 15, 10)
+        elif icon_type == "down":
+            painter.setPen(QPen(Qt.black, 2))
+            painter.drawLine(10, 5, 10, 15)
+            painter.drawLine(5, 10, 10, 15)
+            painter.drawLine(10, 15, 15, 10)
+        elif icon_type == "rename":
+            painter.setPen(QPen(Qt.black, 1))
+            painter.drawLine(5, 15, 15, 15)
+            painter.drawLine(5, 10, 15, 10)
+            painter.drawLine(5, 5, 10, 5)
+        
+        painter.end()
+        
+        button.setIcon(QIcon(pixmap))
+        button.setIconSize(QSize(20, 20))  # 设置图标大小
+        return button
         
     def update_layer_list(self):
         """更新图层列表"""
         # 保存当前滚动位置
         scroll_pos = self.layer_list.verticalScrollBar().value()
         
+        # 记住当前选中的图层
+        current_layer = self.document.current_layer
+        
+        # 断开信号连接，避免触发不必要的事件
+        self.layer_list.blockSignals(True)
+        
+        # 清空列表
         self.layer_list.clear()
         
-        for i, layer in enumerate(self.document.layers):
-            # 创建图层项目，不设置文本（避免重复显示）
-            item = QListWidgetItem("")  # 文本设为空字符串
-            item.setData(Qt.UserRole, i)  # 存储图层索引
+        # 反向添加图层（使顶层图层显示在列表顶部）
+        selected_item = None
+        for layer_name in reversed(self.document.get_layer_names()):
+            item = QListWidgetItem()
             
-            # 设置足够的高度以容纳小部件
-            item.setSizeHint(QSize(item.sizeHint().width(), 30))
-            
-            # 将项目添加到列表
-            self.layer_list.addItem(item)
-            
-            # 设置项目的小部件
+            # 创建自定义小部件来显示图层
             widget = QWidget()
-            
-            # 判断是否为当前图层，设置不同的样式
-            if i == self.document.current_layer:
-                widget.setStyleSheet("""
-                    background-color: #3388FF; 
-                    border-radius: 3px; 
-                    padding: 2px;
-                """)
-            
             layout = QHBoxLayout(widget)
-            layout.setAlignment(Qt.AlignLeft)  # 左对齐
+            layout.setContentsMargins(2, 2, 2, 2)
+            layout.setSpacing(5)
             
             # 添加可见性复选框
-            check_box = QCheckBox()
-            check_box.setChecked(layer['visible'])
-            check_box.stateChanged.connect(lambda state, idx=i: self._on_layer_visibility_changed(idx, state))
-            layout.addWidget(check_box)
+            checkbox = QCheckBox()
+            checkbox.setFixedSize(20, 20)
+            is_visible = self.document.is_layer_visible(layer_name)
+            checkbox.setChecked(is_visible)
+            checkbox.setToolTip("显示/隐藏图层")
+            
+            # 使用lambda捕获当前图层名称
+            checkbox.stateChanged.connect(
+                lambda state, name=layer_name: 
+                self.document.set_layer_visibility(name, state == Qt.Checked)
+            )
+            
+            layout.addWidget(checkbox)
             
             # 添加图层名称标签
-            label = QLabel(layer['name'])
-            if i == self.document.current_layer:
-                label.setStyleSheet("color: white; font-weight: bold;")
-            layout.addWidget(label)
+            label = QLabel(layer_name)
+            if layer_name == current_layer:
+                label.setStyleSheet("font-weight: bold; color: #3366CC;")
+            layout.addWidget(label, 1)  # 设置stretch为1，使标签占用剩余空间
             
-            layout.addStretch()
-            layout.setContentsMargins(5, 3, 5, 3)
-            layout.setSpacing(10)  # 增加元素之间的间距
-            widget.setLayout(layout)
-            
+            # 设置项目
+            self.layer_list.addItem(item)
+            item.setData(Qt.UserRole, layer_name)  # 存储图层名称
+            item.setSizeHint(widget.sizeHint())
             self.layer_list.setItemWidget(item, widget)
             
-            # 如果是当前选中的图层，设置为选中状态
-            if i == self.document.current_layer:
-                item.setSelected(True)
-                self.layer_list.setCurrentItem(item)
+            # 保存选中图层的项目引用
+            if layer_name == current_layer:
+                selected_item = item
         
         # 恢复滚动位置
         self.layer_list.verticalScrollBar().setValue(scroll_pos)
         
-    def _on_layer_clicked(self, item):
-        """图层点击处理"""
-        layer_index = item.data(Qt.UserRole)
-        self.document.select_layer(layer_index)
-        self.layer_selected.emit(layer_index)
+        # 设置选中项
+        if selected_item:
+            selected_item.setSelected(True)
+            self.layer_list.setCurrentItem(selected_item)
         
-        # 选择图层后立即刷新图层列表的显示
-        self.update_layer_list()
+        # 更新按钮状态
+        self._update_button_states()
         
-    def _on_layer_visibility_changed(self, layer_index, state):
-        """图层可见性变化处理"""
-        visible = state == Qt.Checked
-        self.document.set_layer_visibility(layer_index, visible)
-        self.layer_visibility_changed.emit(layer_index, visible)
+        # 恢复信号处理
+        self.layer_list.blockSignals(False)
         
-    def _on_add_layer(self):
-        """添加图层"""
-        name, ok = QInputDialog.getText(self, "添加图层", "图层名称:")
-        if ok and name:
-            self.document.add_layer(name)
-            self.update_layer_list()
+    def _update_button_states(self):
+        """更新按钮状态"""
+        current_row = self.layer_list.currentRow()
+        count = self.layer_list.count()
+        
+        # 设置上移按钮状态
+        self.move_up_button.setEnabled(current_row > 0)
+        
+        # 设置下移按钮状态
+        self.move_down_button.setEnabled(current_row >= 0 and current_row < count - 1)
+        
+        # 设置删除按钮状态（至少保留一个图层）
+        self.remove_layer_button.setEnabled(count > 1 and current_row >= 0)
+        
+        # 设置重命名按钮状态
+        self.rename_layer_button.setEnabled(current_row >= 0)
+        
+    def on_layer_selected(self):
+        """图层选择处理"""
+        # 阻止递归信号
+        if self.layer_list.signalsBlocked():
+            return
             
-    def _on_rename_layer(self):
-        """重命名图层"""
-        current_item = self.layer_list.currentItem()
-        if current_item:
-            layer_index = current_item.data(Qt.UserRole)
-            old_name = self.document.layers[layer_index]['name']
-            name, ok = QInputDialog.getText(self, "重命名图层", "图层名称:", text=old_name)
-            if ok and name:
-                self.document.rename_layer(layer_index, name)
+        selected_items = self.layer_list.selectedItems()
+        if selected_items:
+            layer_name = selected_items[0].data(Qt.UserRole)
+            if layer_name and layer_name != self.document.current_layer:
+                self.document.set_current_layer(layer_name)
+                
+                # 更新图层列表以刷新高亮显示
                 self.update_layer_list()
                 
-    def _on_delete_layer(self):
-        """删除图层"""
-        current_item = self.layer_list.currentItem()
-        if current_item:
-            layer_index = current_item.data(Qt.UserRole)
-            if layer_index > 0:  # 不删除默认图层
-                self.document.remove_layer(layer_index)
-                self.update_layer_list()
+                # 发送图层变更信号
+                self.layer_changed.emit(layer_name)
+                
+                # 更新按钮状态
+                self._update_button_states()
+            
+    def on_layer_item_changed(self, item):
+        """图层项变化处理（复选框状态改变）"""
+        layer_name = item.data(Qt.UserRole)
+        is_visible = item.checkState() == Qt.Checked
+        self.document.set_layer_visibility(layer_name, is_visible)
+        
+    def on_add_layer(self):
+        """添加图层处理"""
+        # 获取一个唯一的图层名称
+        base_name = "新图层"
+        counter = 1
+        layer_name = base_name
+        
+        while layer_name in self.document.get_layer_names():
+            layer_name = f"{base_name} {counter}"
+            counter += 1
+            
+        # 添加新图层
+        self.document.add_layer(layer_name)
+        
+        # 更新图层列表
+        self.update_layer_list()
+        
+        # 选择新图层
+        for i in range(self.layer_list.count()):
+            if self.layer_list.item(i).text() == layer_name:
+                self.layer_list.setCurrentRow(i)
+                break
+                
+    def on_remove_layer(self):
+        """删除图层处理"""
+        selected_items = self.layer_list.selectedItems()
+        if selected_items and self.layer_list.count() > 1:
+            layer_name = selected_items[0].data(Qt.UserRole)
+            
+            # 确认删除
+            reply = QMessageBox.question(self, "确认删除", 
+                                        f"确定要删除图层 '{layer_name}' 吗？\n该操作将删除图层中的所有图形。",
+                                        QMessageBox.Yes | QMessageBox.No, QMessageBox.No)
+            
+            if reply == QMessageBox.Yes:
+                success = self.document.remove_layer(layer_name)
+                if success:
+                    # 强制更新图层列表
+                    self.update_layer_list()
+                    self.set_status_message(f"已删除图层: {layer_name}")
+                else:
+                    QMessageBox.warning(self, "删除失败", "无法删除最后一个图层。")
+                    
+    def on_move_layer_up(self):
+        """上移图层处理 - 在列表中向上移动，在文档中是向下移动"""
+        current_row = self.layer_list.currentRow()
+        if current_row > 0:
+            # 获取当前图层名称
+            current_layer_name = self.layer_list.item(current_row).data(Qt.UserRole)
+            if current_layer_name:
+                # 移动图层
+                self.document.move_layer_down(current_layer_name)
+                
+                # 断开信号连接，避免触发不必要的事件
+                self.layer_list.blockSignals(True)
+                
+                # 保存当前滚动位置
+                scroll_pos = self.layer_list.verticalScrollBar().value()
+                
+                # 清空列表
+                self.layer_list.clear()
+                
+                # 反向添加图层（使顶层图层显示在列表顶部）
+                selected_item = None
+                for layer_name in reversed(self.document.get_layer_names()):
+                    item = QListWidgetItem()
+                    
+                    # 创建自定义小部件来显示图层
+                    widget = QWidget()
+                    layout = QHBoxLayout(widget)
+                    layout.setContentsMargins(2, 2, 2, 2)
+                    layout.setSpacing(5)
+                    
+                    # 添加可见性复选框
+                    checkbox = QCheckBox()
+                    checkbox.setFixedSize(20, 20)
+                    is_visible = self.document.is_layer_visible(layer_name)
+                    checkbox.setChecked(is_visible)
+                    checkbox.setToolTip("显示/隐藏图层")
+                    
+                    # 使用lambda捕获当前图层名称
+                    checkbox.stateChanged.connect(
+                        lambda state, name=layer_name: 
+                        self.document.set_layer_visibility(name, state == Qt.Checked)
+                    )
+                    
+                    layout.addWidget(checkbox)
+                    
+                    # 添加图层名称标签
+                    label = QLabel(layer_name)
+                    if layer_name == current_layer_name:
+                        label.setStyleSheet("font-weight: bold; color: #3366CC;")
+                    layout.addWidget(label, 1)  # 设置stretch为1，使标签占用剩余空间
+                    
+                    # 设置项目
+                    self.layer_list.addItem(item)
+                    item.setData(Qt.UserRole, layer_name)  # 存储图层名称
+                    item.setSizeHint(widget.sizeHint())
+                    self.layer_list.setItemWidget(item, widget)
+                    
+                    # 保存选中图层的项目引用
+                    if layer_name == current_layer_name:
+                        selected_item = item
+                
+                # 恢复滚动位置
+                self.layer_list.verticalScrollBar().setValue(scroll_pos)
+                
+                # 设置选中项
+                if selected_item:
+                    selected_item.setSelected(True)
+                    self.layer_list.setCurrentItem(selected_item)
+                
+                # 更新按钮状态
+                self._update_button_states()
+                
+                # 恢复信号处理
+                self.layer_list.blockSignals(False)
+                
+                # 保持焦点在按钮上以便连续操作
+                self.move_up_button.setFocus()
+    
+    def on_move_layer_down(self):
+        """下移图层处理 - 在列表中向下移动，在文档中是向上移动"""
+        current_row = self.layer_list.currentRow()
+        if current_row >= 0 and current_row < self.layer_list.count() - 1:
+            # 获取当前图层名称
+            current_layer_name = self.layer_list.item(current_row).data(Qt.UserRole)
+            if current_layer_name:
+                # 移动图层
+                self.document.move_layer_up(current_layer_name)
+                
+                # 断开信号连接，避免触发不必要的事件
+                self.layer_list.blockSignals(True)
+                
+                # 保存当前滚动位置
+                scroll_pos = self.layer_list.verticalScrollBar().value()
+                
+                # 清空列表
+                self.layer_list.clear()
+                
+                # 反向添加图层（使顶层图层显示在列表顶部）
+                selected_item = None
+                for layer_name in reversed(self.document.get_layer_names()):
+                    item = QListWidgetItem()
+                    
+                    # 创建自定义小部件来显示图层
+                    widget = QWidget()
+                    layout = QHBoxLayout(widget)
+                    layout.setContentsMargins(2, 2, 2, 2)
+                    layout.setSpacing(5)
+                    
+                    # 添加可见性复选框
+                    checkbox = QCheckBox()
+                    checkbox.setFixedSize(20, 20)
+                    is_visible = self.document.is_layer_visible(layer_name)
+                    checkbox.setChecked(is_visible)
+                    checkbox.setToolTip("显示/隐藏图层")
+                    
+                    # 使用lambda捕获当前图层名称
+                    checkbox.stateChanged.connect(
+                        lambda state, name=layer_name: 
+                        self.document.set_layer_visibility(name, state == Qt.Checked)
+                    )
+                    
+                    layout.addWidget(checkbox)
+                    
+                    # 添加图层名称标签
+                    label = QLabel(layer_name)
+                    if layer_name == current_layer_name:
+                        label.setStyleSheet("font-weight: bold; color: #3366CC;")
+                    layout.addWidget(label, 1)  # 设置stretch为1，使标签占用剩余空间
+                    
+                    # 设置项目
+                    self.layer_list.addItem(item)
+                    item.setData(Qt.UserRole, layer_name)  # 存储图层名称
+                    item.setSizeHint(widget.sizeHint())
+                    self.layer_list.setItemWidget(item, widget)
+                    
+                    # 保存选中图层的项目引用
+                    if layer_name == current_layer_name:
+                        selected_item = item
+                
+                # 恢复滚动位置
+                self.layer_list.verticalScrollBar().setValue(scroll_pos)
+                
+                # 设置选中项
+                if selected_item:
+                    selected_item.setSelected(True)
+                    self.layer_list.setCurrentItem(selected_item)
+                
+                # 更新按钮状态
+                self._update_button_states()
+                
+                # 恢复信号处理
+                self.layer_list.blockSignals(False)
+                
+                # 保持焦点在按钮上以便连续操作
+                self.move_down_button.setFocus()
+    
+    def on_rename_layer(self):
+        """重命名图层处理"""
+        current_row = self.layer_list.currentRow()
+        if current_row >= 0:
+            old_name = self.layer_list.item(current_row).data(Qt.UserRole)
+            
+            # 弹出重命名对话框
+            new_name, ok = QInputDialog.getText(self, "重命名图层", 
+                                             "输入新的图层名称:", 
+                                             QLineEdit.Normal, old_name)
+            
+            if ok and new_name and new_name != old_name:
+                # 检查名称是否已存在
+                if new_name in self.document.get_layer_names():
+                    QMessageBox.warning(self, "重命名失败", 
+                                      f"图层名称 '{new_name}' 已存在。\n请使用其他名称。")
+                else:
+                    self.document.rename_layer(old_name, new_name)
+                    self.update_layer_list()
+                    
+                    # 保持选择
+                    for i in range(self.layer_list.count()):
+                        if self.layer_list.item(i).data(Qt.UserRole) == new_name:
+                            self.layer_list.setCurrentRow(i)
+                            break
+                            
+    def set_status_message(self, message):
+        """设置状态栏消息"""
+        # 查找主窗口
+        parent = self.parent()
+        while parent and not hasattr(parent, 'set_status_message'):
+            parent = parent.parent()
+            
+        if parent and hasattr(parent, 'set_status_message'):
+            parent.set_status_message(message)

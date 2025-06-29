@@ -4,7 +4,11 @@
 import sys
 import os
 from PyQt5.QtWidgets import QApplication
-from views.main_window import MainWindow
+
+# 添加项目根目录到Python路径
+sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+
+from DrawPicture.views.main_window import MainWindow
 
 if __name__ == "__main__":
     # 确保当前目录是程序所在目录

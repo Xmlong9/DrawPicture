@@ -7,7 +7,19 @@ from PyQt5.QtCore import Qt, QRectF, QPointF, QPoint
 from PyQt5.QtGui import QPen, QBrush, QColor, QCursor, QPixmap
 import math
 
-from models.shapes import Line, Rectangle, Circle, ArchimedeanSpiral, SineCurve, Freehand
+from DrawPicture.models.shapes import Line, Rectangle, Circle, ArchimedeanSpiral, SineCurve, Freehand
+
+# 定义工具类型枚举
+class ToolType:
+    SELECTION = "选择"
+    LINE = "直线"
+    RECTANGLE = "矩形"
+    CIRCLE = "圆形"
+    FREEHAND = "自由绘制"
+    SPIRAL = "螺旋线"
+    SINE = "正弦曲线"
+    PAN = "平移"
+    ERASER = "橡皮擦"
 
 class DrawingTool:
     """绘图工具基类"""
@@ -59,7 +71,7 @@ class SelectionTool(DrawingTool):
         self.drag_shape = None
         self.cursor = QCursor(Qt.ArrowCursor)
         self.moving = False  # 是否正在移动
-        self.click_threshold = 3  # 点击判定阈值（像素）
+        self.click_threshold = 1  # 点击判定阈值（像素），降低阈值使移动更灵敏
         self.last_position = None  # 上一次位置，用于计算微小移动
         
     def mouse_press(self, event):
@@ -93,14 +105,14 @@ class SelectionTool(DrawingTool):
             move_distance = ((current_pos.x() - self.last_position.x()) ** 2 + 
                            (current_pos.y() - self.last_position.y()) ** 2) ** 0.5
                            
-            # 只有移动足够距离才判定为拖动
+            # 只有移动足够距离才判定为拖动，降低阈值使移动更灵敏
             if move_distance > self.click_threshold or self.moving:
                 self.moving = True
-                delta = QPointF(current_pos - self.drag_start)
+                delta = QPointF(current_pos - self.last_position)
                 self.document.move_selected_shapes(delta)
-                self.drag_start = current_pos
-            
-            self.last_position = current_pos
+                self.last_position = current_pos
+            else:
+                self.last_position = current_pos
     
     def mouse_release(self, event):
         if event.button() == Qt.LeftButton:
@@ -114,6 +126,10 @@ class SelectionTool(DrawingTool):
             self.drag_shape = None
             self.moving = False
             self.last_position = None
+            
+            # 如果有移动过图形，记录状态用于撤销/重做
+            if self.moving:
+                self.document.record_state()
 
 
 class LineTool(DrawingTool):
@@ -308,10 +324,19 @@ class SineCurveTool(DrawingTool):
             dy = event.pos().y() - self.start_point.y()
             
             if abs(dx) > 5:
-                # 调整长度和频率
+                # 调整长度
                 self.current_shape.length = max(100, abs(dx))
-                self.current_shape.frequency = 0.01 + (abs(dx) % 5) * 0.01
                 
+                # 平滑调整频率，避免频繁变化导致的抽搐
+                # 使用固定的频率范围，根据dx的大小平滑调整
+                max_dx = 800  # 假设最大dx值
+                min_freq = 0.01
+                max_freq = 0.1
+                
+                # 线性映射dx到频率范围
+                normalized_dx = min(abs(dx), max_dx) / max_dx
+                self.current_shape.frequency = min_freq + normalized_dx * (max_freq - min_freq)
+            
             if abs(dy) > 5:
                 # 调整振幅
                 self.current_shape.amplitude = max(10, abs(dy))
