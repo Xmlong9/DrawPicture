@@ -27,6 +27,7 @@ class ToolPanel(QWidget):
         
         # 创建工具按钮
         self.selection_btn = self._create_tool_button("选择", "selection")
+        self.pan_btn = self._create_tool_button("平移", "pan")  # 添加平移工具按钮
         self.line_btn = self._create_tool_button("直线", "line")
         self.rectangle_btn = self._create_tool_button("矩形", "rectangle")
         self.circle_btn = self._create_tool_button("圆形", "circle")
@@ -37,6 +38,7 @@ class ToolPanel(QWidget):
         
         # 将按钮添加到布局
         tools_layout.addWidget(self.selection_btn)
+        tools_layout.addWidget(self.pan_btn)  # 添加平移工具按钮到布局
         tools_layout.addWidget(self.line_btn)
         tools_layout.addWidget(self.rectangle_btn)
         tools_layout.addWidget(self.circle_btn)
@@ -66,9 +68,9 @@ class ToolPanel(QWidget):
     def _on_tool_clicked(self, tool_name):
         """工具按钮点击处理"""
         # 清除所有按钮的选中状态
-        for btn in [self.selection_btn, self.line_btn, self.rectangle_btn, 
+        for btn in [self.selection_btn, self.pan_btn, self.line_btn, self.rectangle_btn, 
                   self.circle_btn, self.freehand_btn, self.spiral_btn, self.sine_btn,
-                  self.eraser_btn]:  # 添加橡皮擦按钮
+                  self.eraser_btn]:  # 包含所有工具按钮
             btn.setChecked(False)
             
         # 设置当前工具
@@ -77,6 +79,8 @@ class ToolPanel(QWidget):
         # 设置当前按钮选中
         if tool_name == "selection":
             self.selection_btn.setChecked(True)
+        elif tool_name == "pan":
+            self.pan_btn.setChecked(True)
         elif tool_name == "line":
             self.line_btn.setChecked(True)
         elif tool_name == "rectangle":

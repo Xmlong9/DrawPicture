@@ -8,7 +8,7 @@ from PyQt5.QtCore import Qt
 
 from models.document import DrawingDocument
 from models.tools import (SelectionTool, LineTool, RectangleTool, CircleTool,
-                         FreehandTool, SpiralTool, SineCurveTool, ColorTool, EraserTool)
+                         FreehandTool, SpiralTool, SineCurveTool, ColorTool, PanTool, EraserTool)
 from views.canvas import Canvas
 from views.panels import ToolPanel, ColorPanel, LayerPanel
 
@@ -42,13 +42,15 @@ class MainWindow(QMainWindow):
             "circle": CircleTool(self.document),
             "freehand": FreehandTool(self.document),
             "spiral": SpiralTool(self.document),
-            "sine": SineCurveTool(self.document),
-            "eraser": EraserTool(self.document)
+            "sine": SineCurveTool(self.document)
         }
         
         # 设置颜色工具
         for tool in self.tools.values():
             tool.set_color_tool(self.color_tool)
+        
+        # 为平移工具设置画布
+        self.canvas = None  # 先声明一个占位符，稍后在init_ui中设置
         
         # 默认选择选择工具
         self.current_tool = self.tools["selection"]
@@ -64,6 +66,10 @@ class MainWindow(QMainWindow):
         self.canvas.set_tool(self.current_tool)
         self.canvas.status_message.connect(self.set_status_message)
         central_layout.addWidget(self.canvas)
+        
+        # 为平移工具设置画布引用
+        if "pan" in self.tools:
+            self.tools["pan"].set_canvas(self.canvas)
         
         self.setCentralWidget(central_widget)
         

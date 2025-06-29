@@ -3,7 +3,7 @@
 
 from PyQt5.QtWidgets import QWidget
 from PyQt5.QtGui import QPainter, QPen, QBrush, QColor, QPainterPath
-from PyQt5.QtCore import Qt, QPoint, QPointF, QRectF, pyqtSignal
+from PyQt5.QtCore import Qt, QPoint, QPointF, QRectF, pyqtSignal, QTime, QTimer
 
 class Canvas(QWidget):
     """绘图画布"""
@@ -19,6 +19,8 @@ class Canvas(QWidget):
         self.grid_size = 20
         self.zoom_factor = 1.0
         self.pan_offset = QPoint(0, 0)
+        self.last_pan_update = None  # 上次平移更新时间
+        self.min_update_interval = 16  # 最小更新间隔(毫秒)，约60fps
         
         # 绑定文档信号
         self.document.document_changed.connect(self.update)
@@ -43,6 +45,7 @@ class Canvas(QWidget):
     def set_tool(self, tool):
         """设置当前工具"""
         self.current_tool = tool
+        # 更新鼠标光标
         self.setCursor(tool.get_cursor())
         
     def paintEvent(self, event):
@@ -200,5 +203,25 @@ class Canvas(QWidget):
         
     def pan_canvas(self, dx, dy):
         """平移画布"""
+        # 如果偏移量太小，忽略此次更新
+        if abs(dx) < 1 and abs(dy) < 1:
+            return
+            
+        # 检查是否需要限制更新频率
+        current_time = QTime.currentTime()
+        if self.last_pan_update is not None:
+            elapsed = self.last_pan_update.msecsTo(current_time)
+            if elapsed < self.min_update_interval:
+                return  # 如果更新太频繁，则跳过
+        
+        # 更新平移偏移量
         self.pan_offset += QPoint(dx, dy)
-        self.update() 
+        self.last_pan_update = current_time
+        
+        # 使用update()而不是repaint()，效率更高
+        self.update()
+        
+        # 更新状态栏坐标
+        center = QPointF(self.width()/2, self.height()/2)
+        scene_center = self.mapToScene(center.toPoint())
+        self.status_message.emit(f"中心坐标: ({int(scene_center.x())}, {int(scene_center.y())})") 

@@ -2,7 +2,7 @@
 # -*- coding: utf-8 -*-
 
 from PyQt5.QtCore import Qt, QRectF, QPointF
-from PyQt5.QtGui import QPainter, QPen, QBrush, QColor, QPainterPath
+from PyQt5.QtGui import QPainter, QPen, QBrush, QColor, QPainterPath, QTransform
 import numpy as np
 import math
 
@@ -35,7 +35,29 @@ class Shape:
         self.scale_factor *= factor
         
     def contains(self, point):
-        """检查点是否在图形内"""
+        """检查点是否在图形内，考虑变换"""
+        # 将全局坐标点转换为图形的本地坐标
+        local_point = self._transform_point_to_local(point)
+        # 交给子类判断点是否在图形内
+        return self._contains_local(local_point)
+        
+    def _transform_point_to_local(self, point):
+        """将全局坐标点转换为图形的本地坐标系"""
+        # 创建转换矩阵
+        transform = QTransform()
+        # 反向应用变换（位置、旋转、缩放）
+        transform.translate(self.position.x(), self.position.y())
+        transform.rotate(self.rotation)
+        transform.scale(self.scale_factor, self.scale_factor)
+        # 计算逆变换
+        inverted, success = transform.inverted()
+        if not success:
+            return point
+        # 应用逆变换
+        return inverted.map(point)
+        
+    def _contains_local(self, point):
+        """检查本地坐标点是否在图形内，由子类实现"""
         return False
         
     def bounding_rect(self):
@@ -88,7 +110,7 @@ class Line(Shape):
     def _draw(self, painter):
         painter.drawLine(self.start_point, self.end_point)
         
-    def contains(self, point):
+    def _contains_local(self, point):
         """检查点是否在线段上或附近"""
         line_path = QPainterPath()
         line_path.moveTo(self.start_point)
@@ -130,11 +152,9 @@ class Rectangle(Shape):
         self.rect = rect
         
     def _draw(self, painter):
-        # 添加调试信息
-        print(f"绘制矩形，填充颜色: {self.brush.color().name()}, 透明度: {self.brush.color().alpha()}")
         painter.drawRect(self.rect)
         
-    def contains(self, point):
+    def _contains_local(self, point):
         """检查点是否在矩形内"""
         return self.rect.contains(point)
         
@@ -164,7 +184,7 @@ class Circle(Shape):
     def _draw(self, painter):
         painter.drawEllipse(self.center, self.radius, self.radius)
         
-    def contains(self, point):
+    def _contains_local(self, point):
         """检查点是否在圆内"""
         dx = point.x() - self.center.x()
         dy = point.y() - self.center.y()
@@ -218,10 +238,44 @@ class ArchimedeanSpiral(Shape):
         
         painter.drawPath(path)
         
-    def contains(self, point):
+    def _contains_local(self, point):
         """检查点是否在螺线上或附近"""
-        # 简化为检查是否在边界矩形内
-        return self.bounding_rect().contains(point)
+        # 获取点到中心的距离
+        dx = point.x() - self.center.x()
+        dy = point.y() - self.center.y()
+        distance = math.sqrt(dx*dx + dy*dy)
+        
+        # 计算角度
+        angle = math.atan2(dy, dx)
+        if angle < 0:
+            angle += 2 * math.pi
+        
+        # 计算该角度对应的螺线半径
+        turns_at_angle = angle / (2 * math.pi)
+        max_turns = min(self.turns, turns_at_angle + self.turns)
+        
+        # 检查点是否在螺线的一定范围内
+        tolerance = 5.0  # 点击容差，可以调整
+        
+        # 检查点是否在螺线最大范围内
+        max_radius = self.a + self.b * (2 * math.pi * max_turns)
+        if distance > max_radius:
+            return False
+            
+        # 找到最接近的螺线点
+        min_distance = float('inf')
+        for theta in np.linspace(0, 2 * math.pi * self.turns, 100):
+            r = self.a + self.b * theta
+            x = r * math.cos(theta) + self.center.x()
+            y = r * math.sin(theta) + self.center.y()
+            
+            dx_spiral = x - point.x()
+            dy_spiral = y - point.y()
+            dist_to_spiral = math.sqrt(dx_spiral*dx_spiral + dy_spiral*dy_spiral)
+            
+            min_distance = min(min_distance, dist_to_spiral)
+            
+        return min_distance <= tolerance
         
     def bounding_rect(self):
         """获取螺线的边界矩形"""
@@ -250,7 +304,7 @@ class SineCurve(Shape):
     """正弦曲线"""
     def __init__(self, start=QPointF(0, 0), amplitude=50, frequency=0.05, length=400):
         super().__init__()
-        self.start = start
+        self.start_point = start
         self.amplitude = amplitude
         self.frequency = frequency
         self.length = length
@@ -258,34 +312,45 @@ class SineCurve(Shape):
     def _draw(self, painter):
         path = QPainterPath()
         
+        # 计算正弦曲线点
         first_point = True
-        for x in range(int(self.length)):
-            y = self.amplitude * math.sin(self.frequency * x)
+        for x in np.linspace(0, self.length, 200):
+            y = self.amplitude * math.sin(x * self.frequency)
+            
             if first_point:
-                path.moveTo(x + self.start.x(), y + self.start.y())
+                path.moveTo(x + self.start_point.x(), y + self.start_point.y())
                 first_point = False
             else:
-                path.lineTo(x + self.start.x(), y + self.start.y())
-        
+                path.lineTo(x + self.start_point.x(), y + self.start_point.y())
+                
         painter.drawPath(path)
         
-    def contains(self, point):
+    def _contains_local(self, point):
         """检查点是否在正弦曲线上或附近"""
-        # 简化为检查是否在边界矩形内
-        return self.bounding_rect().contains(point)
+        # 检查点是否在曲线的横向范围内
+        if point.x() < self.start_point.x() or point.x() > self.start_point.x() + self.length:
+            return False
+            
+        # 计算在x位置的正弦值
+        x_local = point.x() - self.start_point.x()
+        expected_y = self.amplitude * math.sin(x_local * self.frequency) + self.start_point.y()
+        
+        # 检查点是否在曲线附近
+        tolerance = 5.0  # 点击容差
+        return abs(point.y() - expected_y) <= tolerance
         
     def bounding_rect(self):
         """获取正弦曲线的边界矩形"""
         return QRectF(
-            self.start.x(),
-            self.start.y() - self.amplitude,
+            self.start_point.x(),
+            self.start_point.y() - self.amplitude,
             self.length,
             2 * self.amplitude
         )
         
     def clone(self):
         """创建正弦曲线的副本"""
-        curve_copy = SineCurve(QPointF(self.start), self.amplitude, self.frequency, self.length)
+        curve_copy = SineCurve(QPointF(self.start_point), self.amplitude, self.frequency, self.length)
         curve_copy.pen = QPen(self.pen)
         curve_copy.brush = QBrush(self.brush)
         curve_copy.position = QPointF(self.position)
@@ -296,10 +361,10 @@ class SineCurve(Shape):
 
 
 class Freehand(Shape):
-    """自由绘制线条"""
+    """自由绘制"""
     def __init__(self):
         super().__init__()
-        self.points = []
+        self.points = []  # 点列表
         
     def add_point(self, point):
         self.points.append(point)
@@ -308,30 +373,32 @@ class Freehand(Shape):
         if len(self.points) < 2:
             return
             
+        # 创建路径
         path = QPainterPath()
         path.moveTo(self.points[0])
         
-        for point in self.points[1:]:
-            path.lineTo(point)
+        for i in range(1, len(self.points)):
+            path.lineTo(self.points[i])
             
         painter.drawPath(path)
         
-    def contains(self, point):
-        """检查点是否在曲线上或附近"""
+    def _contains_local(self, point):
+        """检查点是否在自由绘制线条上或附近"""
         if len(self.points) < 2:
             return False
             
+        # 创建路径
         path = QPainterPath()
         path.moveTo(self.points[0])
         
-        for p in self.points[1:]:
-            path.lineTo(p)
+        for i in range(1, len(self.points)):
+            path.lineTo(self.points[i])
             
         # 创建一个宽度为pen宽度的stroke path
         stroke_path = QPainterPath()
         stroke_pen = QPen(self.pen)
         stroke_pen.setWidth(max(5, self.pen.width()))
-        stroke_path = path
+        stroke_path.addPath(path)
         
         return stroke_path.contains(point)
         
@@ -365,7 +432,7 @@ class ShapeGroup(Shape):
     """图形组合"""
     def __init__(self):
         super().__init__()
-        self.shapes = []
+        self.shapes = []  # 子图形列表
         
     def add(self, shape):
         self.shapes.append(shape)
@@ -378,10 +445,12 @@ class ShapeGroup(Shape):
         for shape in self.shapes:
             shape.paint(painter)
             
-    def contains(self, point):
-        """检查点是否在组合图形内"""
+    def _contains_local(self, point):
+        """检查点是否在组内任何图形内"""
         for shape in self.shapes:
-            if shape.contains(point):
+            # 将点从组的局部坐标系转换到子图形的局部坐标系
+            shape_point = shape._transform_point_to_local(point)
+            if shape._contains_local(shape_point):
                 return True
         return False
         

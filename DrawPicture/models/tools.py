@@ -3,6 +3,8 @@
 
 from PyQt5.QtCore import Qt, QRectF, QPointF
 from PyQt5.QtGui import QPen, QBrush, QColor, QCursor, QPixmap, QPainterPath, QPainter
+from PyQt5.QtCore import Qt, QRectF, QPointF, QPoint
+from PyQt5.QtGui import QPen, QBrush, QColor, QCursor, QPixmap
 import math
 
 from models.shapes import Line, Rectangle, Circle, ArchimedeanSpiral, SineCurve, Freehand
@@ -56,10 +58,17 @@ class SelectionTool(DrawingTool):
         self.drag_start = None
         self.drag_shape = None
         self.cursor = QCursor(Qt.ArrowCursor)
+        self.moving = False  # 是否正在移动
+        self.click_threshold = 3  # 点击判定阈值（像素）
+        self.last_position = None  # 上一次位置，用于计算微小移动
         
     def mouse_press(self, event):
         if event.button() == Qt.LeftButton:
             point = event.pos()
+            self.last_position = point
+            self.moving = False
+
+            # 获取点击位置的图形
             shape = self.document.get_shape_at(point)
             
             # 检查是否点击了已选择的图形
@@ -79,14 +88,32 @@ class SelectionTool(DrawingTool):
         
     def mouse_move(self, event):
         if self.drag_start and (event.buttons() & Qt.LeftButton):
-            delta = QPointF(event.pos() - self.drag_start)
-            self.document.move_selected_shapes(delta)
-            self.drag_start = event.pos()
+            current_pos = event.pos()
+            # 计算移动距离
+            move_distance = ((current_pos.x() - self.last_position.x()) ** 2 + 
+                           (current_pos.y() - self.last_position.y()) ** 2) ** 0.5
+                           
+            # 只有移动足够距离才判定为拖动
+            if move_distance > self.click_threshold or self.moving:
+                self.moving = True
+                delta = QPointF(current_pos - self.drag_start)
+                self.document.move_selected_shapes(delta)
+                self.drag_start = current_pos
+            
+            self.last_position = current_pos
     
     def mouse_release(self, event):
         if event.button() == Qt.LeftButton:
+            # 如果没有移动，视为单击
+            if not self.moving and self.drag_shape:
+                # 单击已选中的图形时不做任何操作
+                pass
+            
+            # 重置状态
             self.drag_start = None
             self.drag_shape = None
+            self.moving = False
+            self.last_position = None
 
 
 class LineTool(DrawingTool):
@@ -442,4 +469,105 @@ class ColorTool:
         
     def set_line_style(self, style):
         """设置线型"""
-        self.line_style = style
+        self.line_style = style 
+
+
+class PanTool(DrawingTool):
+    """画布平移工具，用于拖拽移动视图"""
+    def __init__(self, document):
+        super().__init__(document)
+        self.name = "平移"
+        self.cursor = QCursor(Qt.OpenHandCursor)
+        self.drag_start = None
+        self.canvas = None  # 需要后续设置
+        self.last_pos = None  # 上一次鼠标位置
+        self.prev_delta = QPointF(0, 0)  # 上一次的移动向量
+        self.smoothing_factor = 0.7  # 平滑因子 (0-1)，值越低越平滑
+        self.max_speed = 10  # 每次移动的最大像素数
+        self.moving = False
+        self.accumulated_motion = QPointF(0, 0)  # 累积的微小移动
+        
+    def set_canvas(self, canvas):
+        """设置关联的画布"""
+        self.canvas = canvas
+        
+    def mouse_press(self, event):
+        if event.button() == Qt.LeftButton:
+            self.drag_start = event.pos()
+            self.last_pos = event.pos()
+            self.prev_delta = QPointF(0, 0)
+            self.moving = False
+            self.accumulated_motion = QPointF(0, 0)
+            self.cursor = QCursor(Qt.ClosedHandCursor)  # 改变光标为抓取状态
+            if self.canvas:
+                self.canvas.setCursor(self.cursor)
+            
+    def mouse_move(self, event):
+        if self.drag_start and event.buttons() & Qt.LeftButton and self.canvas:
+            current_pos = event.pos()
+            
+            # 获取当前缩放因子，并调整移动灵敏度
+            zoom_factor = self.canvas.zoom_factor
+            sensitivity_factor = min(1.0, zoom_factor)  # 缩小时降低灵敏度
+            
+            # 计算原始偏移量
+            raw_delta = QPointF(current_pos - self.last_pos)
+            
+            # 累积微小移动，避免缩放小时微动无效
+            self.accumulated_motion += raw_delta
+            
+            # 如果累积移动很小，且不在移动中，则忽略
+            if (abs(self.accumulated_motion.x()) < 2/sensitivity_factor and 
+                abs(self.accumulated_motion.y()) < 2/sensitivity_factor and 
+                not self.moving):
+                return
+            
+            # 到这一步，视为开始移动
+            self.moving = True
+            
+            # 应用缩放因子调整移动灵敏度
+            adjusted_delta = QPointF(
+                raw_delta.x() * sensitivity_factor,
+                raw_delta.y() * sensitivity_factor
+            )
+            
+            # 限制最大速度
+            max_adjusted_speed = self.max_speed * sensitivity_factor
+            if abs(adjusted_delta.x()) > max_adjusted_speed:
+                adjusted_delta.setX(max_adjusted_speed if adjusted_delta.x() > 0 else -max_adjusted_speed)
+            if abs(adjusted_delta.y()) > max_adjusted_speed:
+                adjusted_delta.setY(max_adjusted_speed if adjusted_delta.y() > 0 else -max_adjusted_speed)
+            
+            # 应用平滑 - 将当前移动与前一次移动混合
+            smoothed_delta = QPointF(
+                adjusted_delta.x() * self.smoothing_factor + self.prev_delta.x() * (1 - self.smoothing_factor),
+                adjusted_delta.y() * self.smoothing_factor + self.prev_delta.y() * (1 - self.smoothing_factor)
+            )
+            
+            # 更新前一次移动向量
+            self.prev_delta = smoothed_delta
+            
+            # 重设累积运动
+            self.accumulated_motion = QPointF(0, 0)
+            
+            # 转换为整数坐标
+            final_delta = QPoint(int(smoothed_delta.x()), int(smoothed_delta.y()))
+            
+            # 只有实际有移动时才更新画布
+            if not final_delta.isNull():
+                self.canvas.pan_offset += final_delta
+                self.canvas.update()
+            
+            # 更新上一次位置
+            self.last_pos = current_pos
+    
+    def mouse_release(self, event):
+        if event.button() == Qt.LeftButton:
+            self.drag_start = None
+            self.last_pos = None
+            self.prev_delta = QPointF(0, 0)
+            self.moving = False
+            self.accumulated_motion = QPointF(0, 0)
+            self.cursor = QCursor(Qt.OpenHandCursor)  # 恢复光标为开放手形
+            if self.canvas:
+                self.canvas.setCursor(self.cursor) 
