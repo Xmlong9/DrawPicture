@@ -16,6 +16,7 @@ class Shape:
         self.scale_factor = 1.0  # 缩放因子
         self.is_selected = False
         self.z_value = 0  # z顺序，用于图层排序
+        self.is_eraser = False  # 标记是否为橡皮擦图形
         
     def set_pen(self, pen):
         self.pen = pen
