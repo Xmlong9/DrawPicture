@@ -219,7 +219,7 @@ class Canvas(QWidget):
         self.last_pan_update = current_time
         
         # 使用update()而不是repaint()，效率更高
-        self.update()
+        self.update() 
         
         # 更新状态栏坐标
         center = QPointF(self.width()/2, self.height()/2)

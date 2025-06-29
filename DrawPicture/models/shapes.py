@@ -322,7 +322,7 @@ class SineCurve(Shape):
                 first_point = False
             else:
                 path.lineTo(x + self.start_point.x(), y + self.start_point.y())
-                
+        
         painter.drawPath(path)
         
     def _contains_local(self, point):

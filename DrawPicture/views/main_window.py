@@ -37,12 +37,14 @@ class MainWindow(QMainWindow):
         """初始化工具"""
         self.tools = {
             "selection": SelectionTool(self.document),
+            "pan": PanTool(self.document),  # 添加平移工具
             "line": LineTool(self.document),
             "rectangle": RectangleTool(self.document),
             "circle": CircleTool(self.document),
             "freehand": FreehandTool(self.document),
             "spiral": SpiralTool(self.document),
-            "sine": SineCurveTool(self.document)
+            "sine": SineCurveTool(self.document),
+            "eraser": EraserTool(self.document)  # 添加橡皮擦工具
         }
         
         # 设置颜色工具
