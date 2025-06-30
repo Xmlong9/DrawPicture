@@ -4,8 +4,8 @@
 import os
 from PyQt5.QtWidgets import (
     QWidget, QVBoxLayout, QHBoxLayout, QPushButton, QLabel, 
-    QColorDialog, QSlider, QComboBox, QGroupBox, QListWidget,
-    QListWidgetItem, QSpinBox, QCheckBox, QToolButton, QMenu,
+                            QColorDialog, QSlider, QComboBox, QGroupBox, QListWidget,
+                            QListWidgetItem, QSpinBox, QCheckBox, QToolButton, QMenu,
     QAction, QInputDialog, QGridLayout, QFormLayout, QMessageBox,
     QLineEdit, QAbstractItemView, QScrollArea, QSizePolicy, QFrame,
     QTabWidget, QRadioButton, QButtonGroup, QDialog
@@ -159,17 +159,39 @@ class ColorPanel(QWidget):
     gradient_pen_changed = pyqtSignal(QColor, QColor, int, int)  # 线条渐变色变化信号：起始颜色，结束颜色，类型，方向
     
     def __init__(self, parent=None):
+        """初始化颜色面板"""
         super().__init__(parent)
-        self.pen_color = QColor(0, 0, 0)  # 默认黑色线条
-        self.fill_color = QColor(0, 0, 0, 0)  # 默认透明填充
+        
+        # 颜色相关属性
+        self.pen_color = QColor(0, 0, 0, 255)  # 默认线条颜色：黑色
+        self.fill_color = QColor(255, 255, 255, 255)  # 默认填充颜色：白色
         self.eraser_size = 20  # 默认橡皮擦大小
         self.current_tool = "selection"  # 当前选中的工具
         
-        # 渐变色相关
-        self.gradient_start_color = QColor(255, 255, 255)  # 默认白色起点
-        self.gradient_end_color = QColor(0, 0, 0)  # 默认黑色终点
-        self.gradient_type = 0  # 默认线性渐变
-        self.gradient_direction = 0  # 默认水平方向
+        # 渐变相关属性
+        self.gradient_start_color = QColor(255, 255, 0)  # 默认渐变起始颜色：黄色
+        self.gradient_end_color = QColor(0, 255, 0)  # 默认渐变结束颜色：绿色
+        self.gradient_type = 0  # 0: 线性渐变, 1: 径向渐变
+        self.gradient_direction = 0  # 0: 水平, 1: 垂直, 2: 对角线
+        
+        # 当前选中的颜色按钮（用于预定义颜色选择）
+        self.current_color_button = None
+        
+        # 预定义颜色
+        self.predefined_colors = [
+            QColor(0, 0, 0),       # 黑色
+            QColor(255, 255, 255), # 白色
+            QColor(255, 0, 0),     # 红色
+            QColor(0, 255, 0),     # 绿色
+            QColor(0, 0, 255),     # 蓝色
+            QColor(255, 255, 0),   # 黄色
+            QColor(0, 255, 255),   # 青色
+            QColor(255, 0, 255),   # 洋红
+            QColor(128, 128, 128), # 灰色
+            QColor(165, 42, 42),   # 棕色
+            QColor(255, 165, 0),   # 橙色
+            QColor(128, 0, 128)    # 紫色
+        ]
         
         self.init_ui()
         
@@ -334,9 +356,9 @@ class ColorPanel(QWidget):
         end_color_layout = QVBoxLayout()
         end_color_layout.setSpacing(2)  # 减少间距
         end_color_layout.setAlignment(Qt.AlignCenter)
-        end_color_label = QLabel("结束颜色")
-        end_color_label.setAlignment(Qt.AlignCenter)
-        end_color_layout.addWidget(end_color_label)
+        end_label = QLabel("结束颜色")
+        end_label.setAlignment(Qt.AlignCenter)
+        end_color_layout.addWidget(end_label)
         
         self.gradient_end_btn = QPushButton()
         self.gradient_end_btn.setFixedSize(25, 25)  # 减小按钮大小
@@ -559,6 +581,9 @@ class ColorPanel(QWidget):
         
     def _on_pen_color_clicked(self):
         """线条颜色按钮点击处理"""
+        # 设置当前颜色按钮
+        self.current_color_button = self.pen_color_btn
+        
         # 创建自定义颜色对话框
         dialog = QColorDialog(self.pen_color, self)
         dialog.setWindowTitle("选择线条颜色")
@@ -583,10 +608,13 @@ class ColorPanel(QWidget):
             if color.isValid():
                 self.pen_color = color
                 self._update_color_button(self.pen_color_btn, color)
-                self.color_changed.emit(color, False)  # 发送颜色变化信号，不是填充色
+                self.color_changed.emit(color, False)  # False表示不是填充颜色
             
     def _on_fill_color_clicked(self):
         """填充颜色按钮点击处理"""
+        # 设置当前颜色按钮
+        self.current_color_button = self.fill_color_btn
+        
         # 获取当前填充颜色，如果是透明的，则创建一个不透明版本作为默认选择
         current_color = self.fill_color
         if current_color.alpha() == 0:
@@ -974,7 +1002,7 @@ class ColorPanel(QWidget):
         """取消渐变填充处理"""
         # 发送信号，使用当前填充颜色
         self.color_changed.emit(self.fill_color, True)
-
+        
     def _on_line_width_changed(self, value):
         """线宽变化处理"""
         self.line_width_label.setText(str(value))
@@ -1051,6 +1079,18 @@ class ColorPanel(QWidget):
         # 设置预览图像
         self.gradient_preview.setIcon(QIcon(pixmap))
         self.gradient_preview.setIconSize(pixmap.size())
+        
+    def _on_predefined_color_clicked(self, color):
+        """处理预定义颜色的点击事件"""
+        # 根据当前选择的颜色按钮来决定是设置填充颜色还是线条颜色
+        if self.current_color_button == self.pen_color_btn:
+            self.pen_color = color
+            self._update_color_button(self.pen_color_btn, color)
+            self.color_changed.emit(color, False)  # False表示不是填充颜色
+        else:
+            self.fill_color = color
+            self._update_color_button(self.fill_color_btn, color)
+            self.color_changed.emit(color, True)  # True表示是填充颜色
 
 
 class LayerPanel(QWidget):
@@ -1242,7 +1282,7 @@ class LayerPanel(QWidget):
             layout = QHBoxLayout(widget)
             layout.setContentsMargins(2, 2, 2, 2)
             layout.setSpacing(5)
-            
+                
             # 添加可见性复选框
             checkbox = QCheckBox()
             checkbox.setFixedSize(20, 20)

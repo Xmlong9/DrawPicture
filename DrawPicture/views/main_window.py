@@ -3,7 +3,7 @@
 
 from PyQt5.QtWidgets import (QMainWindow, QDockWidget, QAction, QFileDialog,
                          QMessageBox, QToolBar, QHBoxLayout, QWidget, QLabel)
-from PyQt5.QtGui import QPainter, QPen, QPixmap, QIcon, QBrush, QColor
+from PyQt5.QtGui import QPainter, QPen, QPixmap, QIcon, QBrush, QColor, QImage
 from PyQt5.QtCore import Qt, QSize, QPoint, QRect
 
 from DrawPicture.models.document import DrawingDocument
@@ -307,24 +307,23 @@ class MainWindow(QMainWindow):
         
         self.setCentralWidget(central_widget)
         
-        # 设置工具面板
+        # 创建工具面板
         self.tool_panel = ToolPanel()
         self.tool_panel.tool_selected.connect(self.on_tool_selected)
-        self.tool_dock = self.create_dock_widget("工具", self.tool_panel, Qt.LeftDockWidgetArea)
+        self.create_dock_widget("工具箱", self.tool_panel, Qt.LeftDockWidgetArea)
         
-        # 设置颜色面板
+        # 创建颜色面板
         self.color_panel = ColorPanel()
         self.color_panel.color_changed.connect(self.on_color_changed)
         self.color_panel.line_width_changed.connect(self.on_line_width_changed)
         self.color_panel.line_style_changed.connect(self.on_line_style_changed)
         self.color_panel.eraser_size_changed.connect(self.on_eraser_size_changed)
-        self.color_panel.gradient_changed.connect(self.on_gradient_changed)  # 连接渐变色信号
-        self.color_dock = self.create_dock_widget("颜色", self.color_panel, Qt.LeftDockWidgetArea)
+        self.create_dock_widget("颜色与样式", self.color_panel, Qt.LeftDockWidgetArea)
         
-        # 设置图层面板
+        # 创建图层面板
         self.layer_panel = LayerPanel(self.document)
         self.layer_panel.layer_changed.connect(self._update_layer_indicator)
-        self.layer_dock = self.create_dock_widget("图层", self.layer_panel, Qt.RightDockWidgetArea)
+        self.create_dock_widget("图层管理", self.layer_panel, Qt.RightDockWidgetArea)
         
         # 创建菜单和工具栏
         self.create_menus()
@@ -428,6 +427,18 @@ class MainWindow(QMainWindow):
         save_action.setShortcut("Ctrl+S")
         save_action.triggered.connect(self.on_save)
         file_menu.addAction(save_action)
+        
+        save_as_action = QAction("另存为(&A)...", self)
+        save_as_action.setShortcut("Ctrl+Shift+S")
+        save_as_action.triggered.connect(self.on_save_as)
+        file_menu.addAction(save_as_action)
+        
+        file_menu.addSeparator()
+        
+        export_action = QAction("导出图片(&E)...", self)
+        export_action.setShortcut("Ctrl+E")
+        export_action.triggered.connect(self.on_export_image)
+        file_menu.addAction(export_action)
         
         file_menu.addSeparator()
         
@@ -583,13 +594,6 @@ class MainWindow(QMainWindow):
         if "eraser" in self.tools:
             self.tools["eraser"].set_eraser_size(size)
     
-    def on_gradient_changed(self, start_color, end_color, gradient_type, direction):
-        """渐变色变化处理"""
-        # 更新文档中的渐变填充设置
-        self.document.color_tool.set_gradient_fill(start_color, end_color, gradient_type, direction)
-        # 更新画布
-        self.canvas.update()
-        
     def set_status_message(self, message):
         """设置状态栏消息"""
         self.status_label.setText(message)
@@ -609,16 +613,164 @@ class MainWindow(QMainWindow):
     def on_save(self):
         """保存文档"""
         if not self.document.file_path:
-            file_path, _ = QFileDialog.getSaveFileName(
-                self, "保存文件", "", "绘图文件 (*.draw);;所有文件 (*)"
+            file_path, filter_type = QFileDialog.getSaveFileName(
+                self, "保存文件", "", 
+                "绘图文件 (*.draw);;PNG图片 (*.png);;JPEG图片 (*.jpg *.jpeg);;BMP图片 (*.bmp);;TIFF图片 (*.tiff);;WebP图片 (*.webp);;SVG图片 (*.svg);;所有文件 (*)"
             )
             if not file_path:
-                return
-            if not file_path.lower().endswith('.draw'):
-                file_path += ".draw"
-            self.document.save(file_path)
+                return False
+                
+            # 根据选择的文件类型处理
+            if "PNG" in filter_type:
+                if not file_path.lower().endswith('.png'):
+                    file_path += ".png"
+                return self.on_export_image(file_path)
+            elif "JPEG" in filter_type:
+                if not file_path.lower().endswith(('.jpg', '.jpeg')):
+                    file_path += ".jpg"
+                return self.on_export_image(file_path)
+            elif "BMP" in filter_type:
+                if not file_path.lower().endswith('.bmp'):
+                    file_path += ".bmp"
+                return self.on_export_image(file_path)
+            elif "TIFF" in filter_type:
+                if not file_path.lower().endswith('.tiff'):
+                    file_path += ".tiff"
+                return self.on_export_image(file_path)
+            elif "WebP" in filter_type:
+                if not file_path.lower().endswith('.webp'):
+                    file_path += ".webp"
+                return self.on_export_image(file_path)
+            elif "SVG" in filter_type:
+                if not file_path.lower().endswith('.svg'):
+                    file_path += ".svg"
+                return self.on_export_image(file_path)
+            else:
+                if not file_path.lower().endswith('.draw'):
+                    file_path += ".draw"
+                self.document.file_path = file_path
+            
+        if self.document.save(self.document.file_path):
+            self.set_status_message(f"文件已保存到: {self.document.file_path}")
+            return True
         else:
-            self.document.save(self.document.file_path) 
+            QMessageBox.warning(self, "保存失败", "无法保存文件。")
+            return False
+
+    def on_save_as(self):
+        """另存为文档"""
+        file_path, filter_type = QFileDialog.getSaveFileName(
+            self, "另存为", "", 
+            "绘图文件 (*.draw);;PNG图片 (*.png);;JPEG图片 (*.jpg *.jpeg);;BMP图片 (*.bmp);;TIFF图片 (*.tiff);;WebP图片 (*.webp);;SVG图片 (*.svg);;所有文件 (*)"
+        )
+        
+        if file_path:
+            # 根据选择的文件类型处理
+            if "PNG" in filter_type:
+                if not file_path.lower().endswith('.png'):
+                    file_path += ".png"
+                return self.on_export_image(file_path)
+            elif "JPEG" in filter_type:
+                if not file_path.lower().endswith(('.jpg', '.jpeg')):
+                    file_path += ".jpg"
+                return self.on_export_image(file_path)
+            elif "BMP" in filter_type:
+                if not file_path.lower().endswith('.bmp'):
+                    file_path += ".bmp"
+                return self.on_export_image(file_path)
+            elif "TIFF" in filter_type:
+                if not file_path.lower().endswith('.tiff'):
+                    file_path += ".tiff"
+                return self.on_export_image(file_path)
+            elif "WebP" in filter_type:
+                if not file_path.lower().endswith('.webp'):
+                    file_path += ".webp"
+                return self.on_export_image(file_path)
+            elif "SVG" in filter_type:
+                if not file_path.lower().endswith('.svg'):
+                    file_path += ".svg"
+                return self.on_export_image(file_path)
+            else:
+                if not file_path.lower().endswith('.draw'):
+                    file_path += ".draw"
+                    
+                if self.document.save(file_path):
+                    self.document.file_path = file_path
+                    self.set_status_message(f"文件已保存到: {file_path}")
+                    return True
+                else:
+                    QMessageBox.warning(self, "保存失败", "无法保存文件。")
+        return False
+        
+    def on_export_image(self, file_path=None):
+        """导出为图片"""
+        if file_path is None:
+            file_path, filter_type = QFileDialog.getSaveFileName(
+                self, "导出图片", "", 
+                "PNG图片 (*.png);;JPEG图片 (*.jpg *.jpeg);;BMP图片 (*.bmp);;TIFF图片 (*.tiff);;WebP图片 (*.webp);;SVG图片 (*.svg);;ICO图标 (*.ico);;所有文件 (*)"
+            )
+            
+            if file_path:
+                # 设置默认扩展名
+                if "PNG" in filter_type and not file_path.lower().endswith('.png'):
+                    file_path += ".png"
+                elif "JPEG" in filter_type and not file_path.lower().endswith(('.jpg', '.jpeg')):
+                    file_path += ".jpg"
+                elif "BMP" in filter_type and not file_path.lower().endswith('.bmp'):
+                    file_path += ".bmp"
+                elif "TIFF" in filter_type and not file_path.lower().endswith('.tiff'):
+                    file_path += ".tiff"
+                elif "WebP" in filter_type and not file_path.lower().endswith('.webp'):
+                    file_path += ".webp"
+                elif "SVG" in filter_type and not file_path.lower().endswith('.svg'):
+                    file_path += ".svg"
+                elif "ICO" in filter_type and not file_path.lower().endswith('.ico'):
+                    file_path += ".ico"
+        
+        if file_path:
+            try:
+                # 创建高分辨率图像
+                canvas_size = self.canvas.size()
+                scale_factor = 2  # 使用整数倍数
+                width = int(canvas_size.width() * scale_factor)
+                height = int(canvas_size.height() * scale_factor)
+                image = QImage(width, height, QImage.Format_ARGB32)
+                image.fill(QColor(255, 255, 255))
+                
+                # 使用高质量渲染
+                painter = QPainter(image)
+                painter.setRenderHint(QPainter.Antialiasing)
+                painter.setRenderHint(QPainter.SmoothPixmapTransform)
+                painter.setRenderHint(QPainter.TextAntialiasing)
+                
+                # 应用缩放以提高分辨率
+                painter.scale(scale_factor, scale_factor)
+                self.canvas.render(painter)
+                painter.end()
+                
+                # 根据文件类型设置保存选项
+                save_options = {}
+                if file_path.lower().endswith(('.jpg', '.jpeg')):
+                    save_options['quality'] = 95  # JPEG质量设置（0-100）
+                elif file_path.lower().endswith('.png'):
+                    save_options['quality'] = 100  # PNG质量设置（0-100）
+                    save_options['compression'] = 1  # PNG压缩级别（0-9）
+                elif file_path.lower().endswith('.webp'):
+                    save_options['quality'] = 95  # WebP质量设置（0-100）
+                elif file_path.lower().endswith('.tiff'):
+                    save_options['compression'] = 'lzw'  # TIFF压缩方式
+                
+                # 保存图片
+                if image.save(file_path, quality=save_options.get('quality', -1)):
+                    QMessageBox.information(self, "导出成功", 
+                                         f"图片已导出到: {file_path}\n分辨率: {image.width()}x{image.height()}")
+                    self.set_status_message(f"图片已导出到: {file_path}")
+                    return True
+                else:
+                    QMessageBox.warning(self, "导出失败", "无法导出图片。")
+            except Exception as e:
+                QMessageBox.warning(self, "导出失败", f"导出图片时发生错误：{str(e)}")
+        return False
 
     def create_toolbars(self):
         """创建工具栏"""
@@ -788,61 +940,3 @@ class MainWindow(QMainWindow):
         )
         msg.setStandardButtons(QMessageBox.Ok)
         msg.exec_() 
-
-    def _setup_connections(self):
-        """设置信号连接"""
-        # 工具面板信号连接
-        self.tool_panel.tool_changed.connect(self._on_tool_changed)
-        self.tool_panel.color_changed.connect(self._on_color_changed)
-        self.tool_panel.line_width_changed.connect(self._on_line_width_changed)
-        self.tool_panel.line_style_changed.connect(self._on_line_style_changed)
-        self.tool_panel.eraser_size_changed.connect(self._on_eraser_size_changed)
-        self.tool_panel.gradient_changed.connect(self._on_gradient_changed)
-        self.tool_panel.gradient_pen_changed.connect(self._on_gradient_pen_changed)
-        
-        # 图层面板信号连接
-        self.layer_panel.layer_visibility_changed.connect(self._on_layer_visibility_changed)
-        self.layer_panel.layer_selected.connect(self._on_layer_selected)
-        self.layer_panel.layer_added.connect(self._on_layer_added)
-        self.layer_panel.layer_removed.connect(self._on_layer_removed)
-        self.layer_panel.layer_moved.connect(self._on_layer_moved)
-        self.layer_panel.layer_renamed.connect(self._on_layer_renamed)
-        
-        # 画布信号连接
-        self.canvas.mouse_position_changed.connect(self._update_status_bar)
-        
-        # 菜单动作信号连接
-        self.action_new.triggered.connect(self._on_new)
-        self.action_open.triggered.connect(self._on_open)
-        self.action_save.triggered.connect(self._on_save)
-        self.action_save_as.triggered.connect(self._on_save_as)
-        self.action_export.triggered.connect(self._on_export)
-        self.action_print.triggered.connect(self._on_print)
-        self.action_exit.triggered.connect(self.close)
-        self.action_undo.triggered.connect(self._on_undo)
-        self.action_redo.triggered.connect(self._on_redo)
-        self.action_cut.triggered.connect(self._on_cut)
-        self.action_copy.triggered.connect(self._on_copy)
-        self.action_paste.triggered.connect(self._on_paste)
-        self.action_delete.triggered.connect(self._on_delete)
-        self.action_select_all.triggered.connect(self._on_select_all)
-        self.action_zoom_in.triggered.connect(self._on_zoom_in)
-        self.action_zoom_out.triggered.connect(self._on_zoom_out)
-        self.action_zoom_reset.triggered.connect(self._on_zoom_reset)
-        self.action_grid.triggered.connect(self._on_toggle_grid)
-        self.action_rulers.triggered.connect(self._on_toggle_rulers)
-        self.action_about.triggered.connect(self._on_about)
-
-    def _on_gradient_changed(self, start_color, end_color, gradient_type, direction):
-        """渐变色变化处理"""
-        # 更新文档中的渐变填充设置
-        self.document.color_tool.set_gradient_fill(start_color, end_color, gradient_type, direction)
-        # 更新画布
-        self.canvas.update()
-        
-    def _on_gradient_pen_changed(self, start_color, end_color, gradient_type, direction):
-        """线条渐变色变化处理"""
-        # 更新文档中的渐变线条设置
-        self.document.color_tool.set_gradient_pen(start_color, end_color, gradient_type, direction)
-        # 更新画布
-        self.canvas.update() 
