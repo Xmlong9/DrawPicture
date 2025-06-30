@@ -2,12 +2,18 @@
 # -*- coding: utf-8 -*-
 
 import os
-from PyQt5.QtWidgets import (QWidget, QVBoxLayout, QHBoxLayout, QPushButton, QLabel, 
-                            QColorDialog, QSlider, QComboBox, QGroupBox, QListWidget,
-                            QListWidgetItem, QSpinBox, QCheckBox, QToolButton, QMenu,
-                            QAction, QInputDialog, QGridLayout, QFormLayout, QMessageBox,
-                            QLineEdit, QAbstractItemView, QScrollArea, QSizePolicy, QFrame)
-from PyQt5.QtGui import QIcon, QColor, QPainter, QPixmap, QPen, QBrush, QPalette
+from PyQt5.QtWidgets import (
+    QWidget, QVBoxLayout, QHBoxLayout, QPushButton, QLabel, 
+    QColorDialog, QSlider, QComboBox, QGroupBox, QListWidget,
+    QListWidgetItem, QSpinBox, QCheckBox, QToolButton, QMenu,
+    QAction, QInputDialog, QGridLayout, QFormLayout, QMessageBox,
+    QLineEdit, QAbstractItemView, QScrollArea, QSizePolicy, QFrame,
+    QTabWidget, QRadioButton, QButtonGroup, QDialog
+)
+from PyQt5.QtGui import (
+    QIcon, QColor, QPainter, QPixmap, QPen, QBrush, QPalette,
+    QLinearGradient, QRadialGradient, QGradient
+)
 from PyQt5.QtCore import Qt, QSize, pyqtSignal, QTimer
 
 from DrawPicture.models.document import DrawingDocument
@@ -149,6 +155,8 @@ class ColorPanel(QWidget):
     line_width_changed = pyqtSignal(int)  # 线宽变化信号
     line_style_changed = pyqtSignal(int)  # 线型变化信号
     eraser_size_changed = pyqtSignal(int)  # 橡皮擦大小变化信号
+    gradient_changed = pyqtSignal(QColor, QColor, int, int)  # 渐变色变化信号：起始颜色，结束颜色，类型，方向
+    gradient_pen_changed = pyqtSignal(QColor, QColor, int, int)  # 线条渐变色变化信号：起始颜色，结束颜色，类型，方向
     
     def __init__(self, parent=None):
         super().__init__(parent)
@@ -156,33 +164,52 @@ class ColorPanel(QWidget):
         self.fill_color = QColor(0, 0, 0, 0)  # 默认透明填充
         self.eraser_size = 20  # 默认橡皮擦大小
         self.current_tool = "selection"  # 当前选中的工具
+        
+        # 渐变色相关
+        self.gradient_start_color = QColor(255, 255, 255)  # 默认白色起点
+        self.gradient_end_color = QColor(0, 0, 0)  # 默认黑色终点
+        self.gradient_type = 0  # 默认线性渐变
+        self.gradient_direction = 0  # 默认水平方向
+        
         self.init_ui()
         
     def init_ui(self):
         """初始化UI"""
         layout = QVBoxLayout(self)
-        layout.setSpacing(10)
-        layout.setContentsMargins(10, 10, 10, 10)
+        layout.setSpacing(5)  # 减少间距
+        layout.setContentsMargins(5, 5, 5, 5)  # 减少边距
         
         # 创建颜色选择组
         color_group = QGroupBox("颜色与样式")
-        color_group.setMinimumWidth(120)  # 设置最小宽度
+        color_group.setMinimumWidth(100)  # 减小最小宽度
         color_layout = QVBoxLayout()
-        color_layout.setSpacing(10)
-        color_layout.setContentsMargins(10, 15, 10, 10)  # 增加内边距
+        color_layout.setSpacing(5)  # 减少间距
+        color_layout.setContentsMargins(5, 10, 5, 5)  # 减少内边距
+        
+        # 创建选项卡控件，分为"基本颜色"和"渐变色"两个选项卡
+        tab_widget = QTabWidget()
+        tab_widget.setMaximumHeight(300)  # 限制最大高度
+        
+        # 基本颜色选项卡
+        basic_color_tab = QWidget()
+        basic_color_layout = QVBoxLayout(basic_color_tab)
+        basic_color_layout.setSpacing(5)  # 减少间距
+        basic_color_layout.setContentsMargins(3, 3, 3, 3)  # 减少内边距
         
         # 颜色选择器区域
         color_selector_layout = QHBoxLayout()
+        color_selector_layout.setSpacing(3)  # 减少间距
         
         # 线条颜色选择器
         pen_layout = QVBoxLayout()
+        pen_layout.setSpacing(2)  # 减少间距
         pen_layout.setAlignment(Qt.AlignCenter)
         pen_label = QLabel("线条颜色")
         pen_label.setAlignment(Qt.AlignCenter)
         pen_layout.addWidget(pen_label)
         
         self.pen_color_btn = QPushButton()
-        self.pen_color_btn.setFixedSize(40, 40)
+        self.pen_color_btn.setFixedSize(30, 30)  # 减小按钮大小
         self.pen_color_btn.setCursor(Qt.PointingHandCursor)
         self._update_color_button(self.pen_color_btn, self.pen_color)
         self.pen_color_btn.clicked.connect(self._on_pen_color_clicked)
@@ -198,13 +225,14 @@ class ColorPanel(QWidget):
         
         # 填充颜色选择器
         fill_layout = QVBoxLayout()
+        fill_layout.setSpacing(2)  # 减少间距
         fill_layout.setAlignment(Qt.AlignCenter)
         fill_label = QLabel("填充颜色")
         fill_label.setAlignment(Qt.AlignCenter)
         fill_layout.addWidget(fill_label)
         
         self.fill_color_btn = QPushButton()
-        self.fill_color_btn.setFixedSize(40, 40)
+        self.fill_color_btn.setFixedSize(30, 30)  # 减小按钮大小
         self.fill_color_btn.setCursor(Qt.PointingHandCursor)
         self._update_color_button(self.fill_color_btn, self.fill_color)
         self.fill_color_btn.clicked.connect(self._on_fill_color_clicked)
@@ -212,22 +240,22 @@ class ColorPanel(QWidget):
         fill_layout.addWidget(self.fill_color_btn)
         color_selector_layout.addLayout(fill_layout)
         
-        color_layout.addLayout(color_selector_layout)
+        basic_color_layout.addLayout(color_selector_layout)
         
         # 分隔线
         h_line = QWidget()
         h_line.setFixedHeight(1)
         h_line.setStyleSheet("background-color: #c0c0c0;")
-        color_layout.addWidget(h_line)
+        basic_color_layout.addWidget(h_line)
         
         # 预定义颜色调色板
         palette_label = QLabel("调色板")
         palette_label.setAlignment(Qt.AlignCenter)
-        color_layout.addWidget(palette_label)
+        basic_color_layout.addWidget(palette_label)
         
-        # 预定义颜色列表 - 扩展更多颜色
+        # 预定义颜色列表 - 紧凑布局
         predefined_layout = QGridLayout()
-        predefined_layout.setSpacing(4)
+        predefined_layout.setSpacing(2)  # 减少间距
         self.predefined_colors = [
             QColor(0, 0, 0),       # 黑色
             QColor(128, 128, 128), # 灰色
@@ -246,7 +274,7 @@ class ColorPanel(QWidget):
         row, col = 0, 0
         for color in self.predefined_colors:
             color_btn = QPushButton()
-            color_btn.setFixedSize(24, 24)
+            color_btn.setFixedSize(18, 18)  # 减小颜色按钮大小
             color_btn.setCursor(Qt.PointingHandCursor)
             self._update_color_button(color_btn, color)
             color_btn.clicked.connect(lambda checked, c=color: self._on_predefined_color_clicked(c))
@@ -261,17 +289,173 @@ class ColorPanel(QWidget):
                 col = 0
                 row += 1
             
-        color_layout.addLayout(predefined_layout)
+        basic_color_layout.addLayout(predefined_layout)
+        
+        # 添加基本颜色选项卡
+        tab_widget.addTab(basic_color_tab, "基本颜色")
+        
+        # 渐变色选项卡
+        gradient_tab = QWidget()
+        gradient_layout = QVBoxLayout(gradient_tab)
+        gradient_layout.setSpacing(5)  # 减少间距
+        gradient_layout.setContentsMargins(3, 3, 3, 3)  # 减少内边距
+        
+        # 渐变色预览区域
+        gradient_preview_label = QLabel("渐变预览")
+        gradient_preview_label.setAlignment(Qt.AlignCenter)
+        gradient_layout.addWidget(gradient_preview_label)
+        
+        self.gradient_preview = QPushButton()
+        self.gradient_preview.setFixedSize(120, 40)  # 减小预览尺寸
+        self.gradient_preview.setEnabled(False)  # 禁用点击
+        gradient_layout.addWidget(self.gradient_preview, 0, Qt.AlignCenter)
+        
+        # 渐变色起点和终点选择
+        gradient_colors_layout = QHBoxLayout()
+        gradient_colors_layout.setSpacing(5)  # 减少间距
+        
+        # 起点颜色
+        start_color_layout = QVBoxLayout()
+        start_color_layout.setSpacing(2)  # 减少间距
+        start_color_layout.setAlignment(Qt.AlignCenter)
+        start_color_label = QLabel("起始颜色")
+        start_color_label.setAlignment(Qt.AlignCenter)
+        start_color_layout.addWidget(start_color_label)
+        
+        self.gradient_start_btn = QPushButton()
+        self.gradient_start_btn.setFixedSize(25, 25)  # 减小按钮大小
+        self.gradient_start_btn.setCursor(Qt.PointingHandCursor)
+        self._update_color_button(self.gradient_start_btn, self.gradient_start_color)
+        self.gradient_start_btn.clicked.connect(self._on_gradient_start_clicked)
+        start_color_layout.addWidget(self.gradient_start_btn)
+        gradient_colors_layout.addLayout(start_color_layout)
+        
+        # 终点颜色
+        end_color_layout = QVBoxLayout()
+        end_color_layout.setSpacing(2)  # 减少间距
+        end_color_layout.setAlignment(Qt.AlignCenter)
+        end_color_label = QLabel("结束颜色")
+        end_color_label.setAlignment(Qt.AlignCenter)
+        end_color_layout.addWidget(end_color_label)
+        
+        self.gradient_end_btn = QPushButton()
+        self.gradient_end_btn.setFixedSize(25, 25)  # 减小按钮大小
+        self.gradient_end_btn.setCursor(Qt.PointingHandCursor)
+        self._update_color_button(self.gradient_end_btn, self.gradient_end_color)
+        self.gradient_end_btn.clicked.connect(self._on_gradient_end_clicked)
+        end_color_layout.addWidget(self.gradient_end_btn)
+        gradient_colors_layout.addLayout(end_color_layout)
+        
+        gradient_layout.addLayout(gradient_colors_layout)
         
         # 分隔线
         h_line2 = QWidget()
         h_line2.setFixedHeight(1)
         h_line2.setStyleSheet("background-color: #c0c0c0;")
-        color_layout.addWidget(h_line2)
+        gradient_layout.addWidget(h_line2)
+        
+        # 渐变类型和方向选择 - 使用更紧凑的布局
+        types_layout = QHBoxLayout()
+        types_layout.setSpacing(3)  # 减少间距
+        
+        # 渐变类型选择
+        type_layout = QVBoxLayout()
+        type_layout.setSpacing(2)  # 减少间距
+        
+        type_label = QLabel("渐变类型")
+        type_label.setAlignment(Qt.AlignCenter)
+        type_layout.addWidget(type_label)
+        
+        gradient_type_layout = QHBoxLayout()
+        gradient_type_layout.setSpacing(2)  # 减少间距
+        self.gradient_type_group = QButtonGroup(self)
+        
+        self.linear_gradient_radio = QRadioButton("线性")  # 简化标签文本
+        self.linear_gradient_radio.setChecked(True)
+        self.linear_gradient_radio.clicked.connect(self._on_gradient_type_changed)
+        self.gradient_type_group.addButton(self.linear_gradient_radio, 0)
+        gradient_type_layout.addWidget(self.linear_gradient_radio)
+        
+        self.radial_gradient_radio = QRadioButton("径向")  # 简化标签文本
+        self.radial_gradient_radio.clicked.connect(self._on_gradient_type_changed)
+        self.gradient_type_group.addButton(self.radial_gradient_radio, 1)
+        gradient_type_layout.addWidget(self.radial_gradient_radio)
+        
+        type_layout.addLayout(gradient_type_layout)
+        types_layout.addLayout(type_layout)
+        
+        gradient_layout.addLayout(types_layout)
+        
+        # 线性渐变方向选择（只有在线性渐变时才显示）
+        self.direction_widget = QWidget()
+        direction_layout = QVBoxLayout(self.direction_widget)
+        direction_layout.setSpacing(2)  # 减少间距
+        direction_layout.setContentsMargins(0, 0, 0, 0)  # 移除内边距
+        
+        direction_label = QLabel("渐变方向")
+        direction_label.setAlignment(Qt.AlignCenter)
+        direction_layout.addWidget(direction_label)
+        
+        direction_buttons_layout = QHBoxLayout()
+        direction_buttons_layout.setSpacing(2)  # 减少间距
+        self.direction_group = QButtonGroup(self)
+        
+        self.horizontal_radio = QRadioButton("水平")
+        self.horizontal_radio.setChecked(True)
+        self.horizontal_radio.clicked.connect(self._on_gradient_direction_changed)
+        self.direction_group.addButton(self.horizontal_radio, 0)
+        direction_buttons_layout.addWidget(self.horizontal_radio)
+        
+        self.vertical_radio = QRadioButton("垂直")
+        self.vertical_radio.clicked.connect(self._on_gradient_direction_changed)
+        self.direction_group.addButton(self.vertical_radio, 1)
+        direction_buttons_layout.addWidget(self.vertical_radio)
+        
+        self.diagonal_radio = QRadioButton("对角")  # 简化标签文本
+        self.diagonal_radio.clicked.connect(self._on_gradient_direction_changed)
+        self.direction_group.addButton(self.diagonal_radio, 2)
+        direction_buttons_layout.addWidget(self.diagonal_radio)
+        
+        direction_layout.addLayout(direction_buttons_layout)
+        gradient_layout.addWidget(self.direction_widget)
+        
+        # 应用和取消渐变按钮 - 放在同一行
+        gradient_buttons_layout = QHBoxLayout()
+        gradient_buttons_layout.setSpacing(3)  # 减少间距
+        
+        self.apply_gradient_btn = QPushButton("应用渐变")  # 简化标签文本
+        self.apply_gradient_btn.setFixedHeight(25)  # 减小按钮高度
+        self.apply_gradient_btn.clicked.connect(self._on_apply_gradient)
+        gradient_buttons_layout.addWidget(self.apply_gradient_btn)
+        
+        self.disable_gradient_btn = QPushButton("取消渐变")  # 简化标签文本
+        self.disable_gradient_btn.setFixedHeight(25)  # 减小按钮高度
+        self.disable_gradient_btn.clicked.connect(self._on_disable_gradient)
+        gradient_buttons_layout.addWidget(self.disable_gradient_btn)
+        
+        gradient_layout.addLayout(gradient_buttons_layout)
+        
+        # 添加渐变色选项卡
+        tab_widget.addTab(gradient_tab, "渐变色")
+        
+        # 将选项卡添加到颜色布局
+        color_layout.addWidget(tab_widget)
+        
+        # 分隔线
+        h_line3 = QWidget()
+        h_line3.setFixedHeight(1)
+        h_line3.setStyleSheet("background-color: #c0c0c0;")
+        color_layout.addWidget(h_line3)
+        
+        # 线宽和线型选择 - 更紧凑的布局
+        style_layout = QHBoxLayout()
+        style_layout.setSpacing(5)  # 减少间距
         
         # 线宽选择
         line_width_layout = QVBoxLayout()
+        line_width_layout.setSpacing(2)  # 减少间距
         line_width_header = QHBoxLayout()
+        line_width_header.setSpacing(2)  # 减少间距
         line_width_header.addWidget(QLabel("线宽:"))
         self.line_width_label = QLabel("2")
         self.line_width_label.setAlignment(Qt.AlignRight)
@@ -279,32 +463,39 @@ class ColorPanel(QWidget):
         line_width_layout.addLayout(line_width_header)
         
         self.line_width_slider = QSlider(Qt.Horizontal)
+        self.line_width_slider.setFixedHeight(20)  # 减小滑块高度
         self.line_width_slider.setRange(1, 20)
         self.line_width_slider.setValue(2)
         self.line_width_slider.setTickPosition(QSlider.TicksBelow)
-        self.line_width_slider.setTickInterval(2)
+        self.line_width_slider.setTickInterval(5)  # 增大刻度间隔
         self.line_width_slider.valueChanged.connect(self._on_line_width_changed)
         line_width_layout.addWidget(self.line_width_slider)
-        color_layout.addLayout(line_width_layout)
+        style_layout.addLayout(line_width_layout)
         
         # 线型选择
-        line_style_layout = QHBoxLayout()
+        line_style_layout = QVBoxLayout()
+        line_style_layout.setSpacing(2)  # 减少间距
         line_style_layout.addWidget(QLabel("线型:"))
         self.line_style_combo = QComboBox()
+        self.line_style_combo.setFixedHeight(22)  # 减小下拉框高度
         self.line_style_combo.addItem("实线", Qt.SolidLine)
         self.line_style_combo.addItem("虚线", Qt.DashLine)
         self.line_style_combo.addItem("点线", Qt.DotLine)
         self.line_style_combo.addItem("点虚线", Qt.DashDotLine)
         self.line_style_combo.currentIndexChanged.connect(self._on_line_style_changed)
         line_style_layout.addWidget(self.line_style_combo)
-        color_layout.addLayout(line_style_layout)
+        style_layout.addLayout(line_style_layout)
+        
+        color_layout.addLayout(style_layout)
         
         # 橡皮擦大小选择（默认隐藏）
         self.eraser_size_widget = QWidget()
         eraser_size_layout = QVBoxLayout(self.eraser_size_widget)
         eraser_size_layout.setContentsMargins(0, 0, 0, 0)
+        eraser_size_layout.setSpacing(2)  # 减少间距
         
         eraser_header = QHBoxLayout()
+        eraser_header.setSpacing(2)  # 减少间距
         eraser_header.addWidget(QLabel("橡皮擦大小:"))
         self.eraser_size_label = QLabel(str(self.eraser_size))
         self.eraser_size_label.setAlignment(Qt.AlignRight)
@@ -312,10 +503,11 @@ class ColorPanel(QWidget):
         eraser_size_layout.addLayout(eraser_header)
         
         self.eraser_size_slider = QSlider(Qt.Horizontal)
+        self.eraser_size_slider.setFixedHeight(20)  # 减小滑块高度
         self.eraser_size_slider.setRange(5, 50)
         self.eraser_size_slider.setValue(self.eraser_size)
         self.eraser_size_slider.setTickPosition(QSlider.TicksBelow)
-        self.eraser_size_slider.setTickInterval(5)
+        self.eraser_size_slider.setTickInterval(10)  # 增大刻度间隔
         self.eraser_size_slider.valueChanged.connect(self._on_eraser_size_changed)
         eraser_size_layout.addWidget(self.eraser_size_slider)
         
@@ -327,6 +519,9 @@ class ColorPanel(QWidget):
         # 将颜色组添加到主布局
         layout.addWidget(color_group)
         layout.addStretch(1)
+        
+        # 初始化渐变预览
+        self._update_gradient_preview()
         
     def _update_color_button(self, button, color):
         """更新颜色按钮样式"""
@@ -364,12 +559,31 @@ class ColorPanel(QWidget):
         
     def _on_pen_color_clicked(self):
         """线条颜色按钮点击处理"""
-        color = QColorDialog.getColor(self.pen_color, self, "选择线条颜色",
-                                    QColorDialog.ShowAlphaChannel)
-        if color.isValid():
-            self.pen_color = color
-            self._update_color_button(self.pen_color_btn, color)
-            self.color_changed.emit(color, False)  # 发送颜色变化信号，不是填充色
+        # 创建自定义颜色对话框
+        dialog = QColorDialog(self.pen_color, self)
+        dialog.setWindowTitle("选择线条颜色")
+        dialog.setOption(QColorDialog.ShowAlphaChannel)
+        
+        # 添加渐变色选择按钮
+        gradient_button = QPushButton("使用渐变色", dialog)
+        gradient_button.clicked.connect(lambda: self._show_gradient_dialog(is_fill=False))
+        
+        # 将按钮添加到对话框布局中
+        layout = dialog.layout()
+        if layout:
+            # 检查布局类型，根据不同类型添加按钮
+            if isinstance(layout, QGridLayout):
+                layout.addWidget(gradient_button, layout.rowCount(), 0, 1, layout.columnCount())
+            else:
+                layout.addWidget(gradient_button)
+        
+        # 显示对话框
+        if dialog.exec_():
+            color = dialog.selectedColor()
+            if color.isValid():
+                self.pen_color = color
+                self._update_color_button(self.pen_color_btn, color)
+                self.color_changed.emit(color, False)  # 发送颜色变化信号，不是填充色
             
     def _on_fill_color_clicked(self):
         """填充颜色按钮点击处理"""
@@ -379,20 +593,388 @@ class ColorPanel(QWidget):
             # 创建不透明版本的颜色（保持RGB值，但设置alpha为255）
             current_color = QColor(current_color.red(), current_color.green(), current_color.blue(), 255)
         
-        # 打开颜色对话框
-        color = QColorDialog.getColor(current_color, self, "选择填充颜色",
+        # 创建自定义颜色对话框
+        dialog = QColorDialog(current_color, self)
+        dialog.setWindowTitle("选择填充颜色")
+        dialog.setOption(QColorDialog.ShowAlphaChannel)
+        
+        # 添加渐变色选择按钮
+        gradient_button = QPushButton("使用渐变色", dialog)
+        gradient_button.clicked.connect(lambda: self._show_gradient_dialog(is_fill=True))
+        
+        # 将按钮添加到对话框布局中
+        layout = dialog.layout()
+        if layout:
+            # 检查布局类型，根据不同类型添加按钮
+            if isinstance(layout, QGridLayout):
+                layout.addWidget(gradient_button, layout.rowCount(), 0, 1, layout.columnCount())
+            else:
+                layout.addWidget(gradient_button)
+        
+        # 显示对话框
+        if dialog.exec_():
+            color = dialog.selectedColor()
+            if color.isValid():
+                self.fill_color = color
+                self._update_color_button(self.fill_color_btn, color)
+                self.color_changed.emit(color, True)  # 发送颜色变化信号，是填充色
+    
+    def _on_gradient_changed(self, start_color, end_color, gradient_type, direction):
+        """渐变色变化处理"""
+        # 检查是否是线条渐变或填充渐变
+        sender = self.sender()
+        is_pen_gradient = hasattr(sender, 'objectName') and sender.objectName() == 'gradient_pen_dialog'
+        
+        # 保存渐变设置到实例变量
+        if is_pen_gradient:
+            # 线条渐变
+            self.gradient_pen_start_color = start_color
+            self.gradient_pen_end_color = end_color
+            self.gradient_pen_type = gradient_type
+            self.gradient_pen_direction = direction
+            # 发送渐变色变化信号
+            self.gradient_pen_changed.emit(start_color, end_color, gradient_type, direction)
+        else:
+            # 填充渐变
+            self.gradient_start_color = start_color
+            self.gradient_end_color = end_color
+            self.gradient_type = gradient_type
+            self.gradient_direction = direction
+            # 发送渐变色变化信号
+            self.gradient_changed.emit(start_color, end_color, gradient_type, direction)
+
+    def _show_gradient_dialog(self, is_fill=True):
+        """显示渐变色选择对话框"""
+        # 创建自定义对话框
+        dialog = QDialog(self)
+        dialog.setWindowTitle("选择渐变色")
+        dialog.setMinimumWidth(350)
+        dialog.setMinimumHeight(400)
+        
+        # 设置对话框对象名称以区分线条渐变和填充渐变
+        if is_fill:
+            dialog.setObjectName("gradient_fill_dialog")
+        else:
+            dialog.setObjectName("gradient_pen_dialog")
+        
+        # 创建对话框布局
+        layout = QVBoxLayout(dialog)
+        layout.setSpacing(10)
+        
+        # 渐变色预览区域
+        preview_label = QLabel("渐变预览")
+        preview_label.setAlignment(Qt.AlignCenter)
+        layout.addWidget(preview_label)
+        
+        preview = QPushButton()
+        preview.setFixedSize(300, 60)
+        preview.setEnabled(False)  # 禁用点击
+        layout.addWidget(preview, 0, Qt.AlignCenter)
+        
+        # 渐变色起点和终点选择
+        colors_layout = QHBoxLayout()
+        
+        # 起点颜色
+        start_layout = QVBoxLayout()
+        start_layout.setAlignment(Qt.AlignCenter)
+        start_label = QLabel("起始颜色")
+        start_label.setAlignment(Qt.AlignCenter)
+        start_layout.addWidget(start_label)
+        
+        start_btn = QPushButton()
+        start_btn.setFixedSize(40, 40)
+        start_btn.setCursor(Qt.PointingHandCursor)
+        
+        # 根据是填充还是线条渐变，设置不同的初始颜色
+        if is_fill:
+            start_color = self.gradient_start_color
+            end_color = self.gradient_end_color
+            current_type = self.gradient_type
+            current_direction = self.gradient_direction
+        else:
+            start_color = self.gradient_pen_start_color if hasattr(self, 'gradient_pen_start_color') else QColor(255, 0, 0)
+            end_color = self.gradient_pen_end_color if hasattr(self, 'gradient_pen_end_color') else QColor(0, 0, 255)
+            current_type = self.gradient_pen_type if hasattr(self, 'gradient_pen_type') else 0
+            current_direction = self.gradient_pen_direction if hasattr(self, 'gradient_pen_direction') else 0
+            
+            # 初始化线条渐变属性（如果尚未初始化）
+            if not hasattr(self, 'gradient_pen_start_color'):
+                self.gradient_pen_start_color = QColor(255, 0, 0)
+                self.gradient_pen_end_color = QColor(0, 0, 255)
+                self.gradient_pen_type = 0
+                self.gradient_pen_direction = 0
+        
+        self._update_color_button(start_btn, start_color)
+        colors_layout.addLayout(start_layout)
+        
+        # 终点颜色
+        end_layout = QVBoxLayout()
+        end_layout.setAlignment(Qt.AlignCenter)
+        end_label = QLabel("结束颜色")
+        end_label.setAlignment(Qt.AlignCenter)
+        end_layout.addWidget(end_label)
+        
+        end_btn = QPushButton()
+        end_btn.setFixedSize(40, 40)
+        end_btn.setCursor(Qt.PointingHandCursor)
+        self._update_color_button(end_btn, end_color)
+        colors_layout.addLayout(end_layout)
+        
+        layout.addLayout(colors_layout)
+        
+        # 添加起始颜色和结束颜色选择按钮
+        start_color_btn = QPushButton("选择起始颜色")
+        start_color_btn.clicked.connect(lambda: self._select_gradient_color(start_btn, preview, True))
+        layout.addWidget(start_color_btn)
+        
+        end_color_btn = QPushButton("选择结束颜色")
+        end_color_btn.clicked.connect(lambda: self._select_gradient_color(end_btn, preview, False))
+        layout.addWidget(end_color_btn)
+        
+        # 渐变类型选择
+        type_label = QLabel("渐变类型")
+        type_label.setAlignment(Qt.AlignCenter)
+        layout.addWidget(type_label)
+        
+        type_group = QButtonGroup(dialog)
+        type_layout = QHBoxLayout()
+        
+        linear_radio = QRadioButton("线性渐变")
+        linear_radio.setChecked(current_type == 0)
+        type_group.addButton(linear_radio, 0)
+        type_layout.addWidget(linear_radio)
+        
+        radial_radio = QRadioButton("径向渐变")
+        radial_radio.setChecked(current_type == 1)
+        type_group.addButton(radial_radio, 1)
+        type_layout.addWidget(radial_radio)
+        
+        layout.addLayout(type_layout)
+        
+        # 线性渐变方向选择
+        direction_widget = QWidget()
+        direction_layout = QVBoxLayout(direction_widget)
+        
+        direction_label = QLabel("渐变方向")
+        direction_label.setAlignment(Qt.AlignCenter)
+        direction_layout.addWidget(direction_label)
+        
+        direction_group = QButtonGroup(dialog)
+        dir_layout = QHBoxLayout()
+        
+        horizontal_radio = QRadioButton("水平")
+        horizontal_radio.setChecked(current_direction == 0)
+        direction_group.addButton(horizontal_radio, 0)
+        dir_layout.addWidget(horizontal_radio)
+        
+        vertical_radio = QRadioButton("垂直")
+        vertical_radio.setChecked(current_direction == 1)
+        direction_group.addButton(vertical_radio, 1)
+        dir_layout.addWidget(vertical_radio)
+        
+        diagonal_radio = QRadioButton("对角线")
+        diagonal_radio.setChecked(current_direction == 2)
+        direction_group.addButton(diagonal_radio, 2)
+        dir_layout.addWidget(diagonal_radio)
+        
+        direction_layout.addLayout(dir_layout)
+        layout.addWidget(direction_widget)
+        
+        # 显示/隐藏方向选择，基于当前渐变类型
+        direction_widget.setVisible(current_type == 0)
+        
+        # 当渐变类型改变时，显示/隐藏方向选择
+        type_group.buttonClicked.connect(lambda btn: direction_widget.setVisible(type_group.id(btn) == 0))
+        
+        # 更新预览的函数
+        def update_preview():
+            pixmap = QPixmap(preview.size())
+            pixmap.fill(Qt.transparent)
+            
+            painter = QPainter(pixmap)
+            painter.setRenderHint(QPainter.Antialiasing)
+            
+            # 获取当前选择的渐变类型和方向
+            gradient_type = type_group.checkedId()
+            direction = direction_group.checkedId()
+            
+            # 创建渐变
+            if gradient_type == 0:  # 线性渐变
+                gradient = QLinearGradient()
+                # 设置渐变方向
+                if direction == 0:  # 水平
+                    gradient.setStart(0, pixmap.height() / 2)
+                    gradient.setFinalStop(pixmap.width(), pixmap.height() / 2)
+                elif direction == 1:  # 垂直
+                    gradient.setStart(pixmap.width() / 2, 0)
+                    gradient.setFinalStop(pixmap.width() / 2, pixmap.height())
+                else:  # 对角线
+                    gradient.setStart(0, 0)
+                    gradient.setFinalStop(pixmap.width(), pixmap.height())
+            else:  # 径向渐变
+                center_x = pixmap.width() / 2
+                center_y = pixmap.height() / 2
+                radius = min(pixmap.width(), pixmap.height()) / 2
+                gradient = QRadialGradient(center_x, center_y, radius)
+            
+            # 获取当前选择的颜色
+            start_color = start_btn.property("color")
+            end_color = end_btn.property("color")
+            
+            # 设置渐变颜色
+            gradient.setColorAt(0, start_color)
+            gradient.setColorAt(1, end_color)
+            
+            # 绘制渐变
+            painter.setPen(Qt.NoPen)
+            painter.setBrush(QBrush(gradient))
+            painter.drawRect(0, 0, pixmap.width(), pixmap.height())
+            
+            # 绘制边框
+            painter.setPen(QPen(Qt.gray, 1))
+            painter.setBrush(Qt.NoBrush)
+            painter.drawRect(0, 0, pixmap.width() - 1, pixmap.height() - 1)
+            
+            painter.end()
+            
+            # 设置预览图像
+            preview.setIcon(QIcon(pixmap))
+            preview.setIconSize(pixmap.size())
+        
+        # 设置初始颜色
+        start_btn.setProperty("color", start_color)
+        end_btn.setProperty("color", end_color)
+        
+        # 连接信号，更新预览
+        type_group.buttonClicked.connect(lambda: update_preview())
+        direction_group.buttonClicked.connect(lambda: update_preview())
+        
+        # 初始化预览
+        update_preview()
+        
+        # 添加确定和取消按钮
+        buttons_layout = QHBoxLayout()
+        ok_button = QPushButton("确定")
+        ok_button.clicked.connect(dialog.accept)
+        cancel_button = QPushButton("取消")
+        cancel_button.clicked.connect(dialog.reject)
+        
+        buttons_layout.addStretch()
+        buttons_layout.addWidget(ok_button)
+        buttons_layout.addWidget(cancel_button)
+        layout.addLayout(buttons_layout)
+        
+        # 显示对话框
+        if dialog.exec_():
+            # 保存选择的渐变设置
+            if is_fill:
+                self.gradient_start_color = start_btn.property("color")
+                self.gradient_end_color = end_btn.property("color")
+                self.gradient_type = type_group.checkedId()
+                self.gradient_direction = direction_group.checkedId()
+                
+                # 发送渐变色变化信号
+                self.gradient_changed.emit(
+                    self.gradient_start_color,
+                    self.gradient_end_color,
+                    self.gradient_type,
+                    self.gradient_direction
+                )
+                
+                # 更新预览
+                self._update_gradient_preview()
+            else:
+                self.gradient_pen_start_color = start_btn.property("color")
+                self.gradient_pen_end_color = end_btn.property("color")
+                self.gradient_pen_type = type_group.checkedId()
+                self.gradient_pen_direction = direction_group.checkedId()
+                
+                # 发送线条渐变色变化信号
+                self.gradient_pen_changed.emit(
+                    self.gradient_pen_start_color,
+                    self.gradient_pen_end_color,
+                    self.gradient_pen_type,
+                    self.gradient_pen_direction
+                )
+                
+                # 更新预览（如果有线条渐变预览）
+                if hasattr(self, '_update_gradient_pen_preview'):
+                    self._update_gradient_pen_preview()
+            
+            # 关闭颜色对话框
+            parent_dialog = self.sender().parent()
+            if parent_dialog:
+                parent_dialog.reject()
+    
+    def _select_gradient_color(self, button, preview, is_start):
+        """选择渐变颜色"""
+        current_color = button.property("color") if button.property("color") else QColor(255, 255, 255)
+        color = QColorDialog.getColor(current_color, self, "选择颜色", QColorDialog.ShowAlphaChannel)
+        
+        if color.isValid():
+            # 更新按钮颜色
+            self._update_color_button(button, color)
+            button.setProperty("color", color)
+            
+            # 更新预览
+            if is_start:
+                self.gradient_start_color = color
+            else:
+                self.gradient_end_color = color
+                
+            # 触发预览更新
+            preview.click()
+
+    def _on_gradient_start_clicked(self):
+        """渐变起点按钮点击处理"""
+        color = QColorDialog.getColor(self.gradient_start_color, self, "选择渐变起始颜色",
                                     QColorDialog.ShowAlphaChannel)
         if color.isValid():
-            self.fill_color = color
-            self._update_color_button(self.fill_color_btn, color)
-            self.color_changed.emit(color, True)  # 发送颜色变化信号，是填充色
-            
-    def _on_predefined_color_clicked(self, color):
-        """预定义颜色按钮点击处理"""
-        self.pen_color = color
-        self._update_color_button(self.pen_color_btn, color)
-        self.color_changed.emit(color, False)  # 发送颜色变化信号，不是填充色
+            self.gradient_start_color = color
+            self._update_color_button(self.gradient_start_btn, color)
+            self._update_gradient_preview()
+
+    def _on_gradient_end_clicked(self):
+        """渐变终点按钮点击处理"""
+        color = QColorDialog.getColor(self.gradient_end_color, self, "选择渐变结束颜色",
+                                    QColorDialog.ShowAlphaChannel)
+        if color.isValid():
+            self.gradient_end_color = color
+            self._update_color_button(self.gradient_end_btn, color)
+            self._update_gradient_preview()
+
+    def _on_gradient_type_changed(self):
+        """渐变类型变化处理"""
+        self.gradient_type = self.gradient_type_group.checkedId()
         
+        # 如果是径向渐变，隐藏方向选择
+        if self.gradient_type == 1:  # 径向渐变
+            self.direction_widget.hide()
+        else:  # 线性渐变
+            self.direction_widget.show()
+            
+        self._update_gradient_preview()
+
+    def _on_gradient_direction_changed(self):
+        """渐变方向变化处理"""
+        self.gradient_direction = self.direction_group.checkedId()
+        self._update_gradient_preview()
+
+    def _on_apply_gradient(self):
+        """应用渐变填充处理"""
+        # 发送渐变变化信号
+        self.gradient_changed.emit(
+            self.gradient_start_color,
+            self.gradient_end_color,
+            self.gradient_type,
+            self.gradient_direction
+        )
+
+    def _on_disable_gradient(self):
+        """取消渐变填充处理"""
+        # 发送信号，使用当前填充颜色
+        self.color_changed.emit(self.fill_color, True)
+
     def _on_line_width_changed(self, value):
         """线宽变化处理"""
         self.line_width_label.setText(str(value))
@@ -423,6 +1005,53 @@ class ColorPanel(QWidget):
         else:
             self.eraser_size_widget.hide()
         
+    def _update_gradient_preview(self):
+        """更新渐变预览"""
+        pixmap = QPixmap(self.gradient_preview.size())
+        pixmap.fill(Qt.transparent)
+        
+        painter = QPainter(pixmap)
+        painter.setRenderHint(QPainter.Antialiasing)
+        
+        # 创建渐变
+        if self.gradient_type == 0:  # 线性渐变
+            gradient = QLinearGradient()
+            # 设置渐变方向
+            if self.gradient_direction == 0:  # 水平
+                gradient.setStart(0, pixmap.height() / 2)
+                gradient.setFinalStop(pixmap.width(), pixmap.height() / 2)
+            elif self.gradient_direction == 1:  # 垂直
+                gradient.setStart(pixmap.width() / 2, 0)
+                gradient.setFinalStop(pixmap.width() / 2, pixmap.height())
+            else:  # 对角线
+                gradient.setStart(0, 0)
+                gradient.setFinalStop(pixmap.width(), pixmap.height())
+        else:  # 径向渐变
+            center_x = pixmap.width() / 2
+            center_y = pixmap.height() / 2
+            radius = min(pixmap.width(), pixmap.height()) / 2
+            gradient = QRadialGradient(center_x, center_y, radius)
+        
+        # 设置渐变颜色
+        gradient.setColorAt(0, self.gradient_start_color)
+        gradient.setColorAt(1, self.gradient_end_color)
+        
+        # 绘制渐变
+        painter.setPen(Qt.NoPen)
+        painter.setBrush(QBrush(gradient))
+        painter.drawRect(0, 0, pixmap.width(), pixmap.height())
+        
+        # 绘制边框
+        painter.setPen(QPen(Qt.gray, 1))
+        painter.setBrush(Qt.NoBrush)
+        painter.drawRect(0, 0, pixmap.width() - 1, pixmap.height() - 1)
+        
+        painter.end()
+        
+        # 设置预览图像
+        self.gradient_preview.setIcon(QIcon(pixmap))
+        self.gradient_preview.setIconSize(pixmap.size())
+
 
 class LayerPanel(QWidget):
     """图层面板"""

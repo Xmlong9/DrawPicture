@@ -307,23 +307,24 @@ class MainWindow(QMainWindow):
         
         self.setCentralWidget(central_widget)
         
-        # 创建工具面板
+        # 设置工具面板
         self.tool_panel = ToolPanel()
         self.tool_panel.tool_selected.connect(self.on_tool_selected)
-        self.create_dock_widget("工具箱", self.tool_panel, Qt.LeftDockWidgetArea)
+        self.tool_dock = self.create_dock_widget("工具", self.tool_panel, Qt.LeftDockWidgetArea)
         
-        # 创建颜色面板
+        # 设置颜色面板
         self.color_panel = ColorPanel()
         self.color_panel.color_changed.connect(self.on_color_changed)
         self.color_panel.line_width_changed.connect(self.on_line_width_changed)
         self.color_panel.line_style_changed.connect(self.on_line_style_changed)
         self.color_panel.eraser_size_changed.connect(self.on_eraser_size_changed)
-        self.create_dock_widget("颜色与样式", self.color_panel, Qt.LeftDockWidgetArea)
+        self.color_panel.gradient_changed.connect(self.on_gradient_changed)  # 连接渐变色信号
+        self.color_dock = self.create_dock_widget("颜色", self.color_panel, Qt.LeftDockWidgetArea)
         
-        # 创建图层面板
+        # 设置图层面板
         self.layer_panel = LayerPanel(self.document)
         self.layer_panel.layer_changed.connect(self._update_layer_indicator)
-        self.create_dock_widget("图层管理", self.layer_panel, Qt.RightDockWidgetArea)
+        self.layer_dock = self.create_dock_widget("图层", self.layer_panel, Qt.RightDockWidgetArea)
         
         # 创建菜单和工具栏
         self.create_menus()
@@ -582,6 +583,13 @@ class MainWindow(QMainWindow):
         if "eraser" in self.tools:
             self.tools["eraser"].set_eraser_size(size)
     
+    def on_gradient_changed(self, start_color, end_color, gradient_type, direction):
+        """渐变色变化处理"""
+        # 更新文档中的渐变填充设置
+        self.document.color_tool.set_gradient_fill(start_color, end_color, gradient_type, direction)
+        # 更新画布
+        self.canvas.update()
+        
     def set_status_message(self, message):
         """设置状态栏消息"""
         self.status_label.setText(message)
@@ -780,3 +788,61 @@ class MainWindow(QMainWindow):
         )
         msg.setStandardButtons(QMessageBox.Ok)
         msg.exec_() 
+
+    def _setup_connections(self):
+        """设置信号连接"""
+        # 工具面板信号连接
+        self.tool_panel.tool_changed.connect(self._on_tool_changed)
+        self.tool_panel.color_changed.connect(self._on_color_changed)
+        self.tool_panel.line_width_changed.connect(self._on_line_width_changed)
+        self.tool_panel.line_style_changed.connect(self._on_line_style_changed)
+        self.tool_panel.eraser_size_changed.connect(self._on_eraser_size_changed)
+        self.tool_panel.gradient_changed.connect(self._on_gradient_changed)
+        self.tool_panel.gradient_pen_changed.connect(self._on_gradient_pen_changed)
+        
+        # 图层面板信号连接
+        self.layer_panel.layer_visibility_changed.connect(self._on_layer_visibility_changed)
+        self.layer_panel.layer_selected.connect(self._on_layer_selected)
+        self.layer_panel.layer_added.connect(self._on_layer_added)
+        self.layer_panel.layer_removed.connect(self._on_layer_removed)
+        self.layer_panel.layer_moved.connect(self._on_layer_moved)
+        self.layer_panel.layer_renamed.connect(self._on_layer_renamed)
+        
+        # 画布信号连接
+        self.canvas.mouse_position_changed.connect(self._update_status_bar)
+        
+        # 菜单动作信号连接
+        self.action_new.triggered.connect(self._on_new)
+        self.action_open.triggered.connect(self._on_open)
+        self.action_save.triggered.connect(self._on_save)
+        self.action_save_as.triggered.connect(self._on_save_as)
+        self.action_export.triggered.connect(self._on_export)
+        self.action_print.triggered.connect(self._on_print)
+        self.action_exit.triggered.connect(self.close)
+        self.action_undo.triggered.connect(self._on_undo)
+        self.action_redo.triggered.connect(self._on_redo)
+        self.action_cut.triggered.connect(self._on_cut)
+        self.action_copy.triggered.connect(self._on_copy)
+        self.action_paste.triggered.connect(self._on_paste)
+        self.action_delete.triggered.connect(self._on_delete)
+        self.action_select_all.triggered.connect(self._on_select_all)
+        self.action_zoom_in.triggered.connect(self._on_zoom_in)
+        self.action_zoom_out.triggered.connect(self._on_zoom_out)
+        self.action_zoom_reset.triggered.connect(self._on_zoom_reset)
+        self.action_grid.triggered.connect(self._on_toggle_grid)
+        self.action_rulers.triggered.connect(self._on_toggle_rulers)
+        self.action_about.triggered.connect(self._on_about)
+
+    def _on_gradient_changed(self, start_color, end_color, gradient_type, direction):
+        """渐变色变化处理"""
+        # 更新文档中的渐变填充设置
+        self.document.color_tool.set_gradient_fill(start_color, end_color, gradient_type, direction)
+        # 更新画布
+        self.canvas.update()
+        
+    def _on_gradient_pen_changed(self, start_color, end_color, gradient_type, direction):
+        """线条渐变色变化处理"""
+        # 更新文档中的渐变线条设置
+        self.document.color_tool.set_gradient_pen(start_color, end_color, gradient_type, direction)
+        # 更新画布
+        self.canvas.update() 
