@@ -608,16 +608,23 @@ class MainWindow(QMainWindow):
             self.tools["eraser"].set_eraser_size(size)
             self.set_status_message(f"橡皮擦大小: {size}")
     
-    def on_gradient_changed(self, start_color, end_color, gradient_type, direction):
+    def on_gradient_changed(self, start_color, end_color, gradient_type, direction, apply_to_fill, apply_to_line):
         """渐变色变化处理"""
         # 设置渐变填充
         self.color_tool.set_gradient_fill(start_color, end_color, gradient_type, direction)
+        
+        # 设置是否应用到填充和线条
+        self.color_tool.enable_gradient_fill(apply_to_fill)
+        self.color_tool.enable_gradient_line(apply_to_line)
         
         # 应用到选中的图形
         if self.document.selected_shapes:
             self.document.record_state()  # 记录状态用于撤销
             for shape in self.document.selected_shapes:
-                shape.set_brush(self.color_tool.get_brush())
+                if apply_to_fill:
+                    shape.set_brush(self.color_tool.get_brush())
+                if apply_to_line:
+                    shape.set_pen(self.color_tool.get_pen())
             self.document.document_changed.emit()  # 更新显示
             
         # 设置状态消息
@@ -631,7 +638,18 @@ class MainWindow(QMainWindow):
             else:
                 direction_str = "对角线"
         
-        self.set_status_message(f"已应用{gradient_type_str}渐变填充{direction_str}")
+        # 构建应用范围字符串
+        apply_parts = []
+        if apply_to_fill:
+            apply_parts.append("填充")
+        if apply_to_line:
+            apply_parts.append("线条")
+        
+        if apply_parts:
+            apply_str = "和".join(apply_parts)
+            self.set_status_message(f"已应用{gradient_type_str}渐变到{apply_str} {direction_str}")
+        else:
+            self.set_status_message("未应用渐变，请选择至少一个应用范围")
         
     def on_shape_selected(self, shape_type, params):
         """图形库中的图形选择处理"""

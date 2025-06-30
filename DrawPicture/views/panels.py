@@ -217,7 +217,7 @@ class ColorPanel(QWidget):
     line_width_changed = pyqtSignal(int)  # 线宽变化信号
     line_style_changed = pyqtSignal(int)  # 线型变化信号
     eraser_size_changed = pyqtSignal(int)  # 橡皮擦大小变化信号
-    gradient_changed = pyqtSignal(QColor, QColor, int, int)  # 渐变色变化信号：起始颜色，结束颜色，类型，方向
+    gradient_changed = pyqtSignal(QColor, QColor, int, int, bool, bool)  # 渐变色变化信号：起始颜色，结束颜色，类型，方向，应用到填充，应用到线条
     
     def __init__(self, parent=None):
         super().__init__(parent)
@@ -414,6 +414,27 @@ class ColorPanel(QWidget):
         h_line2.setFixedHeight(1)
         h_line2.setStyleSheet("background-color: #c0c0c0;")
         gradient_layout.addWidget(h_line2)
+        
+        # 渐变应用范围选择
+        apply_to_layout = QHBoxLayout()
+        apply_to_layout.setContentsMargins(5, 0, 5, 0)  # 减少内边距
+        
+        # 渐变应用范围标签
+        apply_range_label = QLabel("应用范围:")
+        apply_to_layout.addWidget(apply_range_label)
+        
+        # 分别添加两个复选框
+        self.apply_to_fill_check = QCheckBox("填充")
+        self.apply_to_fill_check.setChecked(True)  # 默认应用到填充
+        self.apply_to_fill_check.stateChanged.connect(self._on_apply_range_changed)
+        apply_to_layout.addWidget(self.apply_to_fill_check)
+        
+        self.apply_to_line_check = QCheckBox("线条")
+        self.apply_to_line_check.setChecked(False)  # 默认不应用到线条
+        self.apply_to_line_check.stateChanged.connect(self._on_apply_range_changed)
+        apply_to_layout.addWidget(self.apply_to_line_check)
+        
+        gradient_layout.addLayout(apply_to_layout)
         
         # 渐变类型和方向选择 - 使用更紧凑的布局
         types_layout = QHBoxLayout()
@@ -763,19 +784,31 @@ class ColorPanel(QWidget):
 
     def _on_apply_gradient(self):
         """应用渐变填充处理"""
+        # 获取是否应用到填充和线条
+        apply_to_fill = self.apply_to_fill_check.isChecked()
+        apply_to_line = self.apply_to_line_check.isChecked()
+        
         # 发送渐变变化信号
         self.gradient_changed.emit(
             self.gradient_start_color,
             self.gradient_end_color,
             self.gradient_type,
-            self.gradient_direction
+            self.gradient_direction,
+            apply_to_fill,
+            apply_to_line
         )
 
     def _on_disable_gradient(self):
         """取消渐变填充处理"""
         # 发送信号，使用当前填充颜色
         self.color_changed.emit(self.fill_color, True)
-        
+
+    def _on_apply_range_changed(self, state):
+        """渐变应用范围变化处理"""
+        # 这里不需要做任何事情，因为复选框状态已经自动更新
+        # 在应用渐变时会读取这些复选框的状态
+        self._update_gradient_preview()
+
 
 class LayerPanel(QWidget):
     """图层面板"""
