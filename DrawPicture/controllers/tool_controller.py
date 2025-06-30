@@ -5,7 +5,8 @@ from PyQt5.QtCore import QObject, pyqtSignal, QPointF
 from PyQt5.QtGui import QPen, QBrush
 
 from models.tools import (SelectionTool, LineTool, RectangleTool, CircleTool,
-                        FreehandTool, SpiralTool, SineCurveTool, ColorTool, EraserTool)
+                        FreehandTool, SpiralTool, SineCurveTool, ColorTool, EraserTool,
+                        PenTool)
 
 class ToolController(QObject):
     """工具控制器类，管理所有工具和工具相关的交互"""
@@ -28,7 +29,8 @@ class ToolController(QObject):
             "freehand": FreehandTool(self.document),
             "spiral": SpiralTool(self.document),
             "sine": SineCurveTool(self.document),
-            "eraser": EraserTool(self.document)
+            "eraser": EraserTool(self.document),
+            "pen": PenTool(self.document)
         }
         
         # 默认使用选择工具

@@ -1171,4 +1171,97 @@ class Cloud(Shape):
     def clone(self):
         cloud_copy = Cloud(QPointF(self.center), self.width, self.height, self.color, self.fill_color, self.line_width, self.line_style, self.layer)
         cloud_copy.selected = False
-        return cloud_copy 
+        return cloud_copy
+
+
+class PenPath(Shape):
+    """钢笔路径，由一系列连接的直线段组成"""
+    def __init__(self, color=None, fill_color=None, line_width=1, line_style=Qt.SolidLine, layer="默认图层"):
+        super().__init__(color, fill_color, line_width, line_style, layer)
+        self.points = []  # 存储锚点
+        self.path = QPainterPath()  # 绘制路径
+        self.is_closed = False  # 路径是否闭合
+        
+    def add_point(self, point):
+        """添加一个锚点"""
+        self.points.append(point)
+        self._update_path()
+        
+    def _update_path(self):
+        """更新绘制路径"""
+        self.path = QPainterPath()
+        
+        if not self.points:
+            return
+            
+        # 起始点
+        self.path.moveTo(self.points[0])
+        
+        # 如果只有一个点，绘制一个小圆点
+        if len(self.points) == 1:
+            self.path.addEllipse(self.points[0], 2, 2)
+            return
+        
+        # 绘制线段
+        for i in range(1, len(self.points)):
+            self.path.lineTo(self.points[i])
+                
+        # 如果路径闭合，连接到起始点
+        if self.is_closed and len(self.points) > 2:
+            self.path.closeSubpath()
+            
+    def close_path(self):
+        """闭合路径"""
+        if len(self.points) > 2:
+            self.is_closed = True
+            self._update_path()
+            
+    def _draw(self, painter):
+        """绘制路径"""
+        painter.drawPath(self.path)
+        
+        # 如果被选中，绘制锚点
+        if self.selected:
+            anchor_pen = QPen(Qt.blue, 1)
+            
+            painter.save()
+            
+            # 绘制锚点
+            painter.setPen(anchor_pen)
+            painter.setBrush(Qt.white)
+            for point in self.points:
+                painter.drawEllipse(point, 4, 4)
+            
+            painter.restore()
+            
+    def _contains_local(self, point):
+        """检查点是否在路径上"""
+        # 为路径创建一个"笔触"区域
+        stroke_width = max(10, self.pen.width() * 2)  # 至少10像素宽的检测区域
+        stroke_path = QPainterPath()
+        
+        # 创建一个笔触路径
+        pen = QPen(self.pen)
+        pen.setWidth(stroke_width)
+        stroke_path.addPath(self.path)
+        
+        # 检查点是否在笔触路径内
+        return stroke_path.contains(point)
+        
+    def bounding_rect(self):
+        """获取路径的边界矩形"""
+        return self.path.boundingRect()
+        
+    def clone(self):
+        """创建路径的副本"""
+        new_path = PenPath(
+            self.color,
+            self.fill_color,
+            self.line_width,
+            self.line_style,
+            self.layer
+        )
+        new_path.points = self.points.copy()
+        new_path.is_closed = self.is_closed
+        new_path._update_path()
+        return new_path 

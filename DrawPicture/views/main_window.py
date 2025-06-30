@@ -9,7 +9,8 @@ from PyQt5.QtCore import Qt, QSize, QPoint, QRect, QPointF
 from DrawPicture.models.document import Document
 from DrawPicture.models.tools import (SelectionTool, LineTool, RectangleTool, CircleTool,
                          FreehandTool, SpiralTool, SineCurveTool, ColorTool, PanTool, EraserTool,
-                         SuperEllipseTool, ParametricCurveTool, GearTool, LeafTool, CloudTool)
+                         SuperEllipseTool, ParametricCurveTool, GearTool, LeafTool, CloudTool,
+                         PenTool)
 from DrawPicture.views.canvas import Canvas
 from DrawPicture.views.panels import ToolPanel, ColorPanel, LayerPanel, ShapeLibraryPanel
 
@@ -281,7 +282,8 @@ class MainWindow(QMainWindow):
             "parametric_butterfly": ParametricCurveTool(self.document, "butterfly"),
             "gear": GearTool(self.document),
             "leaf": LeafTool(self.document),
-            "cloud": CloudTool(self.document)
+            "cloud": CloudTool(self.document),
+            "pen": PenTool(self.document)
         }
         
         # 设置颜色工具
