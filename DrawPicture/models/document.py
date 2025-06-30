@@ -2,7 +2,7 @@
 # -*- coding: utf-8 -*-
 
 from PyQt5.QtCore import QObject, pyqtSignal, QPointF, QFileInfo
-from PyQt5.QtGui import QColor
+from PyQt5.QtGui import QColor, QPen, QBrush
 import pickle
 import os
 
@@ -492,7 +492,14 @@ class DrawingDocument(QObject):
         # 创建所有图形的副本
         state = []
         for shape in self.shapes:
-            state.append(shape.clone())
+            # 使用clone方法深度复制图形，确保所有属性都被复制
+            shape_copy = shape.clone()
+            # 确保选择状态也被复制
+            shape_copy.selected = shape.selected
+            # 确保填充和线条属性正确复制
+            shape_copy.pen = QPen(shape.pen)
+            shape_copy.brush = QBrush(shape.brush)
+            state.append(shape_copy)
             
         self.undo_stack.append({
             'shapes': state,
@@ -515,7 +522,14 @@ class DrawingDocument(QObject):
         # 保存当前状态到重做栈
         current_state = []
         for shape in self.shapes:
-            current_state.append(shape.clone())
+            # 使用clone方法深度复制图形，确保所有属性都被复制
+            shape_copy = shape.clone()
+            # 确保选择状态也被复制
+            shape_copy.selected = shape.selected
+            # 确保填充和线条属性正确复制
+            shape_copy.pen = QPen(shape.pen)
+            shape_copy.brush = QBrush(shape.brush)
+            current_state.append(shape_copy)
             
         self.redo_stack.append({
             'shapes': current_state,
@@ -525,12 +539,28 @@ class DrawingDocument(QObject):
         
         # 恢复上一个状态
         state = self.undo_stack.pop()
-        self.shapes = state['shapes']
-        self.layers = state['layers']
-        self.current_layer = state['current_layer']
         
-        # 清空选择
-        self.selected_shapes.clear()
+        # 确保每个形状的属性都被正确恢复
+        restored_shapes = []
+        for shape in state['shapes']:
+            # 创建一个新的深度副本，确保不会引用原始对象
+            shape_copy = shape.clone()
+            # 确保pen和brush被正确复制
+            shape_copy.pen = QPen(shape.pen)
+            shape_copy.brush = QBrush(shape.brush)
+            # 复制选择状态
+            shape_copy.selected = shape.selected
+            restored_shapes.append(shape_copy)
+            
+        # 恢复图形列表
+        self.shapes = restored_shapes
+        
+        # 恢复选择状态
+        self.selected_shapes = [shape for shape in self.shapes if shape.selected]
+        
+        # 恢复图层信息
+        self.layers = state['layers'].copy()  # 使用副本避免引用原始对象
+        self.current_layer = state['current_layer']
         
         self.set_modified(True)
         self.document_changed.emit()
@@ -546,7 +576,14 @@ class DrawingDocument(QObject):
         # 保存当前状态到撤销栈
         current_state = []
         for shape in self.shapes:
-            current_state.append(shape.clone())
+            # 使用clone方法深度复制图形，确保所有属性都被复制
+            shape_copy = shape.clone()
+            # 确保选择状态也被复制
+            shape_copy.selected = shape.selected
+            # 确保填充和线条属性正确复制
+            shape_copy.pen = QPen(shape.pen)
+            shape_copy.brush = QBrush(shape.brush)
+            current_state.append(shape_copy)
             
         self.undo_stack.append({
             'shapes': current_state,
@@ -556,12 +593,28 @@ class DrawingDocument(QObject):
         
         # 恢复下一个状态
         state = self.redo_stack.pop()
-        self.shapes = state['shapes']
-        self.layers = state['layers']
-        self.current_layer = state['current_layer']
         
-        # 清空选择
-        self.selected_shapes.clear()
+        # 确保每个形状的属性都被正确恢复
+        restored_shapes = []
+        for shape in state['shapes']:
+            # 创建一个新的深度副本，确保不会引用原始对象
+            shape_copy = shape.clone()
+            # 确保pen和brush被正确复制
+            shape_copy.pen = QPen(shape.pen)
+            shape_copy.brush = QBrush(shape.brush)
+            # 复制选择状态
+            shape_copy.selected = shape.selected
+            restored_shapes.append(shape_copy)
+            
+        # 恢复图形列表
+        self.shapes = restored_shapes
+        
+        # 恢复选择状态
+        self.selected_shapes = [shape for shape in self.shapes if shape.selected]
+        
+        # 恢复图层信息
+        self.layers = state['layers'].copy()  # 使用副本避免引用原始对象
+        self.current_layer = state['current_layer']
         
         self.set_modified(True)
         self.document_changed.emit()
@@ -1070,7 +1123,14 @@ class Document(QObject):
         # 创建所有图形的副本
         state = []
         for shape in self.shapes:
-            state.append(shape.clone())
+            # 使用clone方法深度复制图形，确保所有属性都被复制
+            shape_copy = shape.clone()
+            # 确保选择状态也被复制
+            shape_copy.selected = shape.selected
+            # 确保填充和线条属性正确复制
+            shape_copy.pen = QPen(shape.pen)
+            shape_copy.brush = QBrush(shape.brush)
+            state.append(shape_copy)
             
         self.undo_stack.append({
             'shapes': state,
@@ -1093,7 +1153,14 @@ class Document(QObject):
         # 保存当前状态到重做栈
         current_state = []
         for shape in self.shapes:
-            current_state.append(shape.clone())
+            # 使用clone方法深度复制图形，确保所有属性都被复制
+            shape_copy = shape.clone()
+            # 确保选择状态也被复制
+            shape_copy.selected = shape.selected
+            # 确保填充和线条属性正确复制
+            shape_copy.pen = QPen(shape.pen)
+            shape_copy.brush = QBrush(shape.brush)
+            current_state.append(shape_copy)
             
         self.redo_stack.append({
             'shapes': current_state,
@@ -1103,12 +1170,28 @@ class Document(QObject):
         
         # 恢复上一个状态
         state = self.undo_stack.pop()
-        self.shapes = state['shapes']
-        self.layers = state['layers']
-        self.current_layer = state['current_layer']
         
-        # 清空选择
-        self.selected_shapes.clear()
+        # 确保每个形状的属性都被正确恢复
+        restored_shapes = []
+        for shape in state['shapes']:
+            # 创建一个新的深度副本，确保不会引用原始对象
+            shape_copy = shape.clone()
+            # 确保pen和brush被正确复制
+            shape_copy.pen = QPen(shape.pen)
+            shape_copy.brush = QBrush(shape.brush)
+            # 复制选择状态
+            shape_copy.selected = shape.selected
+            restored_shapes.append(shape_copy)
+            
+        # 恢复图形列表
+        self.shapes = restored_shapes
+        
+        # 恢复选择状态
+        self.selected_shapes = [shape for shape in self.shapes if shape.selected]
+        
+        # 恢复图层信息
+        self.layers = state['layers'].copy()  # 使用副本避免引用原始对象
+        self.current_layer = state['current_layer']
         
         self.set_modified(True)
         self.document_changed.emit()
@@ -1124,7 +1207,14 @@ class Document(QObject):
         # 保存当前状态到撤销栈
         current_state = []
         for shape in self.shapes:
-            current_state.append(shape.clone())
+            # 使用clone方法深度复制图形，确保所有属性都被复制
+            shape_copy = shape.clone()
+            # 确保选择状态也被复制
+            shape_copy.selected = shape.selected
+            # 确保填充和线条属性正确复制
+            shape_copy.pen = QPen(shape.pen)
+            shape_copy.brush = QBrush(shape.brush)
+            current_state.append(shape_copy)
             
         self.undo_stack.append({
             'shapes': current_state,
@@ -1134,12 +1224,28 @@ class Document(QObject):
         
         # 恢复下一个状态
         state = self.redo_stack.pop()
-        self.shapes = state['shapes']
-        self.layers = state['layers']
-        self.current_layer = state['current_layer']
         
-        # 清空选择
-        self.selected_shapes.clear()
+        # 确保每个形状的属性都被正确恢复
+        restored_shapes = []
+        for shape in state['shapes']:
+            # 创建一个新的深度副本，确保不会引用原始对象
+            shape_copy = shape.clone()
+            # 确保pen和brush被正确复制
+            shape_copy.pen = QPen(shape.pen)
+            shape_copy.brush = QBrush(shape.brush)
+            # 复制选择状态
+            shape_copy.selected = shape.selected
+            restored_shapes.append(shape_copy)
+            
+        # 恢复图形列表
+        self.shapes = restored_shapes
+        
+        # 恢复选择状态
+        self.selected_shapes = [shape for shape in self.shapes if shape.selected]
+        
+        # 恢复图层信息
+        self.layers = state['layers'].copy()  # 使用副本避免引用原始对象
+        self.current_layer = state['current_layer']
         
         self.set_modified(True)
         self.document_changed.emit()

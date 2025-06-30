@@ -188,7 +188,20 @@ class Shape:
     
     def clone(self):
         """创建图形的副本"""
-        return Shape(self.color, self.fill_color, self.line_width, self.line_style, self.layer)
+        shape_copy = Shape(self.color, self.fill_color, self.line_width, self.line_style, self.layer)
+        
+        # 直接复制画笔和画刷
+        shape_copy.pen = QPen(self.pen)
+        shape_copy.brush = QBrush(self.brush)
+        
+        # 复制变换属性
+        shape_copy.position = QPointF(self.position)
+        shape_copy.rotation = self.rotation
+        shape_copy.scale_x = self.scale_x
+        shape_copy.scale_y = self.scale_y
+        shape_copy.z_value = self.z_value
+        
+        return shape_copy
 
 
 class Line(Shape):
@@ -313,12 +326,18 @@ class Rectangle(Shape):
         
     def clone(self):
         """创建矩形的副本"""
+        # 先创建一个基础的矩形副本
         rect_copy = Rectangle(QRectF(self.rect), self.color, self.fill_color, self.line_width, self.line_style, self.layer)
+        
+        # 复制基类属性（画笔、画刷和变换）
+        rect_copy.pen = QPen(self.pen)
+        rect_copy.brush = QBrush(self.brush)
         rect_copy.position = QPointF(self.position)
         rect_copy.rotation = self.rotation
         rect_copy.scale_x = self.scale_x
         rect_copy.scale_y = self.scale_y
         rect_copy.z_value = self.z_value
+        
         return rect_copy
 
 
@@ -1264,4 +1283,15 @@ class PenPath(Shape):
         new_path.points = self.points.copy()
         new_path.is_closed = self.is_closed
         new_path._update_path()
+        
+        # 直接复制画笔和画刷
+        new_path.pen = QPen(self.pen)
+        new_path.brush = QBrush(self.brush)
+        
+        # 复制变换属性
+        new_path.position = QPointF(self.position)
+        new_path.rotation = self.rotation
+        new_path.scale_x = self.scale_x
+        new_path.scale_y = self.scale_y
+        
         return new_path 
