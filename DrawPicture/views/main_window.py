@@ -4,11 +4,12 @@
 from PyQt5.QtWidgets import (QMainWindow, QDockWidget, QAction, QFileDialog,
                          QMessageBox, QToolBar, QHBoxLayout, QWidget, QLabel)
 from PyQt5.QtGui import QPainter, QPen, QPixmap, QIcon, QBrush, QColor
-from PyQt5.QtCore import Qt, QSize, QPoint, QRect
+from PyQt5.QtCore import Qt, QSize, QPoint, QRect, QPointF
 
-from DrawPicture.models.document import DrawingDocument
+from DrawPicture.models.document import Document
 from DrawPicture.models.tools import (SelectionTool, LineTool, RectangleTool, CircleTool,
-                         FreehandTool, SpiralTool, SineCurveTool, ColorTool, PanTool, EraserTool)
+                         FreehandTool, SpiralTool, SineCurveTool, ColorTool, PanTool, EraserTool,
+                         SuperEllipseTool, ParametricCurveTool, GearTool, LeafTool, CloudTool)
 from DrawPicture.views.canvas import Canvas
 from DrawPicture.views.panels import ToolPanel, ColorPanel, LayerPanel
 
@@ -18,7 +19,7 @@ class MainWindow(QMainWindow):
         super().__init__()
         
         # 创建文档
-        self.document = DrawingDocument()
+        self.document = Document()
         
         # 创建颜色工具
         self.color_tool = ColorTool()
@@ -267,14 +268,21 @@ class MainWindow(QMainWindow):
         """初始化工具"""
         self.tools = {
             "selection": SelectionTool(self.document),
-            "pan": PanTool(self.document),  # 添加平移工具
+            "pan": PanTool(self.document),
             "line": LineTool(self.document),
             "rectangle": RectangleTool(self.document),
             "circle": CircleTool(self.document),
             "freehand": FreehandTool(self.document),
             "spiral": SpiralTool(self.document),
             "sine": SineCurveTool(self.document),
-            "eraser": EraserTool(self.document)  # 添加橡皮擦工具
+            "eraser": EraserTool(self.document),
+            "superellipse": SuperEllipseTool(self.document),
+            "parametric_rose": ParametricCurveTool(self.document, "rose"),
+            "parametric_heart": ParametricCurveTool(self.document, "heart"),
+            "parametric_butterfly": ParametricCurveTool(self.document, "butterfly"),
+            "gear": GearTool(self.document),
+            "leaf": LeafTool(self.document),
+            "cloud": CloudTool(self.document)
         }
         
         # 设置颜色工具

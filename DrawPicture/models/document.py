@@ -6,7 +6,7 @@ from PyQt5.QtGui import QColor
 import pickle
 import os
 
-class DrawingDocument(QObject):
+class Document(QObject):
     """图形文档类，管理所有图形对象"""
     
     # 定义信号
