@@ -24,7 +24,7 @@ DrawPicture是一个功能强大的绘图应用程序，使用PyQt5开发，提�
 
 克隆仓库：
 ```bash
-git clone https://github.com/yourusername/DrawPicture.git
+git clone https://github.com/Xmlong9/DrawPicture.git
 cd DrawPicture
 ```
 
