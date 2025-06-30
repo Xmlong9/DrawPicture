@@ -579,14 +579,7 @@ class DrawingDocument(QObject):
     
     def set_modified(self, modified):
         """设置文档修改状态"""
-=======
-#!/usr/bin/env python3
-# -*- coding: utf-8 -*-
-
-from PyQt5.QtCore import QObject, pyqtSignal, QPointF, QFileInfo
-from PyQt5.QtGui import QColor
-import pickle
-import os
+        self.modified = modified
 
 class Document(QObject):
     """图形文档类，管理所有图形对象"""
@@ -1163,5 +1156,4 @@ class Document(QObject):
     
     def set_modified(self, modified):
         """设置文档修改状态"""
->>>>>>> main
         self.modified = modified 

@@ -606,7 +606,7 @@ class MainWindow(QMainWindow):
         """橡皮擦大小变化处理"""
         if "eraser" in self.tools:
             self.tools["eraser"].set_eraser_size(size)
-<<<<<<< HEAD
+            self.set_status_message(f"橡皮擦大小: {size}")
     
     def on_gradient_changed(self, start_color, end_color, gradient_type, direction):
         """渐变色变化处理"""
@@ -632,9 +632,6 @@ class MainWindow(QMainWindow):
                 direction_str = "对角线"
         
         self.set_status_message(f"已应用{gradient_type_str}渐变填充{direction_str}")
-    
-=======
-        self.set_status_message(f"橡皮擦大小: {size}")
         
     def on_shape_selected(self, shape_type, params):
         """图形库中的图形选择处理"""
@@ -642,7 +639,6 @@ class MainWindow(QMainWindow):
         self.shape_library_panel.add_shape_to_document(shape_type, params, self.color_tool)
         self.set_status_message(f"已添加{shape_type}图形")
         
->>>>>>> main
     def set_status_message(self, message):
         """设置状态栏消息"""
         self.status_label.setText(message)
