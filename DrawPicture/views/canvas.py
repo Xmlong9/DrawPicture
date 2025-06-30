@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
 
-from PyQt5.QtWidgets import QWidget
+from PyQt5.QtWidgets import QWidget, QMenu, QAction, QInputDialog, QMessageBox
 from PyQt5.QtGui import QPainter, QPen, QBrush, QColor, QPainterPath, QCursor
 from PyQt5.QtCore import Qt, QPoint, QPointF, QRectF, pyqtSignal, QTime, QTimer
 
@@ -62,11 +62,103 @@ class Canvas(QWidget):
         p.setColor(self.backgroundRole(), Qt.white)
         self.setPalette(p)
         
+        # 右键菜单相关
+        self.context_menu = None
+        self.last_context_pos = None
+        
     def set_tool(self, tool):
         """设置当前工具"""
         self.current_tool = tool
         # 更新鼠标光标
         self.setCursor(tool.get_cursor())
+        
+    def create_context_menu(self, pos):
+        """创建右键菜单"""
+        self.last_context_pos = pos
+        scene_pos = self.mapToScene(pos)
+        
+        # 检查是否点击了图形
+        shape = self.document.get_shape_at(scene_pos)
+        
+        menu = QMenu(self)
+        
+        # 基本操作
+        copy_action = QAction("复制", self)
+        copy_action.triggered.connect(self.copy_selected_shapes)
+        menu.addAction(copy_action)
+        
+        delete_action = QAction("删除", self)
+        delete_action.triggered.connect(self.delete_selected_shapes)
+        menu.addAction(delete_action)
+        
+        menu.addSeparator()
+        
+        # 图层操作
+        layer_menu = QMenu("图层", self)
+        
+        # 获取所有图层
+        layer_names = self.document.get_layer_names()
+        for layer_name in layer_names:
+            layer_action = QAction(layer_name, self)
+            layer_action.setCheckable(True)
+            layer_action.setChecked(layer_name == self.document.current_layer)
+            layer_action.triggered.connect(lambda checked, name=layer_name: self.move_to_layer(name))
+            layer_menu.addAction(layer_action)
+        
+        menu.addMenu(layer_menu)
+        
+        menu.addSeparator()
+        
+        # 选择操作
+        select_all_action = QAction("全选", self)
+        select_all_action.triggered.connect(self.select_all_shapes)
+        menu.addAction(select_all_action)
+        
+        deselect_all_action = QAction("取消选择", self)
+        deselect_all_action.triggered.connect(self.document.deselect_all)
+        menu.addAction(deselect_all_action)
+        
+        # 根据是否有选中的图形启用/禁用菜单项
+        has_selection = len(self.document.selected_shapes) > 0
+        copy_action.setEnabled(has_selection)
+        delete_action.setEnabled(has_selection)
+        
+        return menu
+        
+    def copy_selected_shapes(self):
+        """复制选中的图形"""
+        if self.document.selected_shapes:
+            self.document.clone_selected_shapes()
+            self.status_message.emit("已复制选中的图形")
+            
+    def delete_selected_shapes(self):
+        """删除选中的图形"""
+        if self.document.selected_shapes:
+            self.document.delete_selected_shapes()
+            self.status_message.emit("已删除选中的图形")
+            
+    def move_to_layer(self, layer_name):
+        """将选中的图形移动到指定图层"""
+        if not self.document.selected_shapes:
+            return
+            
+        for shape in self.document.selected_shapes:
+            shape.layer = layer_name
+        self.document.document_changed.emit()
+        self.status_message.emit(f"已移动到图层: {layer_name}")
+        
+    def select_all_shapes(self):
+        """选择所有图形"""
+        self.document.deselect_all()
+        for shape in self.document.shapes:
+            if self.document.is_layer_visible(shape.layer):
+                self.document.select_shape(shape, True)
+        self.status_message.emit("已选择所有图形")
+        
+    def contextMenuEvent(self, event):
+        """右键菜单事件"""
+        menu = self.create_context_menu(event.pos())
+        menu.exec_(event.globalPos())
         
     def paintEvent(self, event):
         """绘制事件处理"""
@@ -137,50 +229,71 @@ class Canvas(QWidget):
         # 绘制垂直线
         x = start_x
         while x < width:
-            painter.drawLine(int(x), 0, int(x), height)
+            x_int = int(x)
+            painter.drawLine(QPoint(x_int, 0), QPoint(x_int, height))
             x += grid_spacing
             
         # 绘制水平线
         y = start_y
         while y < height:
-            painter.drawLine(0, int(y), width, int(y))
+            y_int = int(y)
+            painter.drawLine(QPoint(0, y_int), QPoint(width, y_int))
             y += grid_spacing
         
     def draw_selection_handles(self, painter, shape):
         """绘制选择手柄"""
-        from PyQt5.QtCore import QRectF
-        
-        # 获取图形在全局坐标系中的边界矩形
         rect = shape._get_global_bounds()
         
-        # 设置选择框的笔
-        pen = QPen(Qt.blue)
-        pen.setStyle(Qt.DashLine)
-        painter.setPen(pen)
-        painter.setBrush(Qt.NoBrush)
-        
-        # 绘制选择框
-        painter.drawRect(rect)
-        
-        # 设置手柄的笔和刷子
-        painter.setPen(Qt.black)
-        painter.setBrush(QBrush(Qt.white))
-        
-        # 绘制手柄
-        handle_size = 6 / self.zoom_factor  # 调整手柄大小以适应缩放
+        # 设置手柄大小
+        handle_size = 8
         half_handle = handle_size / 2
         
-        # 角落手柄
-        painter.drawRect(QRectF(rect.left() - half_handle, rect.top() - half_handle, handle_size, handle_size))
-        painter.drawRect(QRectF(rect.right() - half_handle, rect.top() - half_handle, handle_size, handle_size))
-        painter.drawRect(QRectF(rect.left() - half_handle, rect.bottom() - half_handle, handle_size, handle_size))
-        painter.drawRect(QRectF(rect.right() - half_handle, rect.bottom() - half_handle, handle_size, handle_size))
+        # 绘制旋转手柄（顶部中心）
+        rotation_handle_y = rect.top() - 20
+        rotation_handle_x = rect.left() + rect.width() / 2
         
-        # 中点手柄
-        painter.drawRect(QRectF(rect.left() - half_handle, rect.top() + rect.height() / 2 - half_handle, handle_size, handle_size))
-        painter.drawRect(QRectF(rect.right() - half_handle, rect.top() + rect.height() / 2 - half_handle, handle_size, handle_size))
-        painter.drawRect(QRectF(rect.left() + rect.width() / 2 - half_handle, rect.top() - half_handle, handle_size, handle_size))
-        painter.drawRect(QRectF(rect.left() + rect.width() / 2 - half_handle, rect.bottom() - half_handle, handle_size, handle_size))
+        # 绘制旋转图标
+        painter.setPen(QPen(Qt.blue, 2))
+        painter.setBrush(Qt.white)
+        painter.drawEllipse(QPointF(rotation_handle_x, rotation_handle_y), handle_size, handle_size)
+        
+        # 绘制旋转箭头
+        arrow_size = handle_size * 1.2
+        painter.setPen(QPen(Qt.blue, 2))
+        # 绘制圆弧箭头
+        path = QPainterPath()
+        path.moveTo(rotation_handle_x + arrow_size, rotation_handle_y)
+        path.arcTo(rotation_handle_x - arrow_size, rotation_handle_y - arrow_size,
+                  arrow_size * 2, arrow_size * 2, 0, 270)
+        # 绘制箭头头部
+        path.lineTo(rotation_handle_x + arrow_size/2, rotation_handle_y - arrow_size - arrow_size/4)
+        path.lineTo(rotation_handle_x + arrow_size + arrow_size/4, rotation_handle_y - arrow_size)
+        path.lineTo(rotation_handle_x + arrow_size, rotation_handle_y)
+        painter.drawPath(path)
+        
+        # 绘制缩放手柄
+        handles = [
+            (rect.left(), rect.top()),  # 左上
+            (rect.left() + rect.width()/2, rect.top()),  # 上中
+            (rect.right(), rect.top()),  # 右上
+            (rect.right(), rect.top() + rect.height()/2),  # 右中
+            (rect.right(), rect.bottom()),  # 右下
+            (rect.left() + rect.width()/2, rect.bottom()),  # 下中
+            (rect.left(), rect.bottom()),  # 左下
+            (rect.left(), rect.top() + rect.height()/2),  # 左中
+        ]
+        
+        # 绘制白色方块手柄
+        painter.setPen(QPen(Qt.blue, 1))
+        painter.setBrush(Qt.white)
+        for x, y in handles:
+            painter.drawRect(QRectF(x - handle_size, y - handle_size,
+                                  handle_size * 2, handle_size * 2))
+                                  
+        # 绘制选择框
+        painter.setPen(QPen(Qt.blue, 1, Qt.SolidLine))
+        painter.setBrush(Qt.NoBrush)
+        painter.drawRect(rect)
             
     def mapToScene(self, point):
         """将窗口坐标映射到场景坐标"""

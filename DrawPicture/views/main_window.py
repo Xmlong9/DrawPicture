@@ -4,13 +4,14 @@
 from PyQt5.QtWidgets import (QMainWindow, QDockWidget, QAction, QFileDialog,
                          QMessageBox, QToolBar, QHBoxLayout, QWidget, QLabel)
 from PyQt5.QtGui import QPainter, QPen, QPixmap, QIcon, QBrush, QColor, QImage
-from PyQt5.QtCore import Qt, QSize, QPoint, QRect
+from PyQt5.QtCore import Qt, QSize, QPoint, QRect, QPointF
 
-from DrawPicture.models.document import DrawingDocument
+from DrawPicture.models.document import Document
 from DrawPicture.models.tools import (SelectionTool, LineTool, RectangleTool, CircleTool,
-                         FreehandTool, SpiralTool, SineCurveTool, ColorTool, PanTool, EraserTool)
+                         FreehandTool, SpiralTool, SineCurveTool, ColorTool, PanTool, EraserTool,
+                         SuperEllipseTool, ParametricCurveTool, GearTool, LeafTool, CloudTool)
 from DrawPicture.views.canvas import Canvas
-from DrawPicture.views.panels import ToolPanel, ColorPanel, LayerPanel
+from DrawPicture.views.panels import ToolPanel, ColorPanel, LayerPanel, ShapeLibraryPanel
 
 class MainWindow(QMainWindow):
     """主窗口类"""
@@ -18,7 +19,7 @@ class MainWindow(QMainWindow):
         super().__init__()
         
         # 创建文档
-        self.document = DrawingDocument()
+        self.document = Document()
         
         # 创建颜色工具
         self.color_tool = ColorTool()
@@ -267,14 +268,21 @@ class MainWindow(QMainWindow):
         """初始化工具"""
         self.tools = {
             "selection": SelectionTool(self.document),
-            "pan": PanTool(self.document),  # 添加平移工具
+            "pan": PanTool(self.document),
             "line": LineTool(self.document),
             "rectangle": RectangleTool(self.document),
             "circle": CircleTool(self.document),
             "freehand": FreehandTool(self.document),
             "spiral": SpiralTool(self.document),
             "sine": SineCurveTool(self.document),
-            "eraser": EraserTool(self.document)  # 添加橡皮擦工具
+            "eraser": EraserTool(self.document),
+            "superellipse": SuperEllipseTool(self.document),
+            "parametric_rose": ParametricCurveTool(self.document, "rose"),
+            "parametric_heart": ParametricCurveTool(self.document, "heart"),
+            "parametric_butterfly": ParametricCurveTool(self.document, "butterfly"),
+            "gear": GearTool(self.document),
+            "leaf": LeafTool(self.document),
+            "cloud": CloudTool(self.document)
         }
         
         # 设置颜色工具
@@ -324,6 +332,11 @@ class MainWindow(QMainWindow):
         self.layer_panel = LayerPanel(self.document)
         self.layer_panel.layer_changed.connect(self._update_layer_indicator)
         self.create_dock_widget("图层管理", self.layer_panel, Qt.RightDockWidgetArea)
+        
+        # 创建图形库面板
+        self.shape_library_panel = ShapeLibraryPanel(self.document)
+        self.shape_library_panel.shape_selected.connect(self.on_shape_selected)
+        self.create_dock_widget("图形库", self.shape_library_panel, Qt.RightDockWidgetArea)
         
         # 创建菜单和工具栏
         self.create_menus()
@@ -590,10 +603,16 @@ class MainWindow(QMainWindow):
             
     def on_eraser_size_changed(self, size):
         """橡皮擦大小变化处理"""
-        # 更新橡皮擦工具的大小设置
         if "eraser" in self.tools:
             self.tools["eraser"].set_eraser_size(size)
-    
+        self.set_status_message(f"橡皮擦大小: {size}")
+        
+    def on_shape_selected(self, shape_type, params):
+        """图形库中的图形选择处理"""
+        # 将图形添加到文档
+        self.shape_library_panel.add_shape_to_document(shape_type, params, self.color_tool)
+        self.set_status_message(f"已添加{shape_type}图形")
+        
     def set_status_message(self, message):
         """设置状态栏消息"""
         self.status_label.setText(message)
