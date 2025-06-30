@@ -352,7 +352,7 @@ class SelectionTool(DrawingTool):
         return rect.center()
         
     def _save_shape_data(self):
-        """保存图形原始数据"""
+        """保存图形的原始数据"""
         if not self.document.selected_shapes:
             return None
             
@@ -360,8 +360,7 @@ class SelectionTool(DrawingTool):
         return {
             'position': QPointF(shape.position),
             'rotation': shape.rotation,
-            'scale_x': shape.scale_x,
-            'scale_y': shape.scale_y
+            'scale': shape.scale_x  # 假设scale_x和scale_y相等
         }
         
     def mouse_release(self, event):

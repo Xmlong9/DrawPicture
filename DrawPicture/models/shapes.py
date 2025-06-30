@@ -29,7 +29,8 @@ class Shape:
             
         self.position = QPointF(0, 0)
         self.rotation = 0  # 旋转角度
-        self.scale_factor = 1.0  # 缩放因子
+        self.scale_x = 1.0  # X方向缩放因子
+        self.scale_y = 1.0  # Y方向缩放因子
         self.z_value = 0  # z顺序，用于图层排序
         
     def __getstate__(self):
@@ -89,7 +90,8 @@ class Shape:
         
     def scale(self, factor):
         """缩放图形"""
-        self.scale_factor *= factor
+        self.scale_x *= factor
+        self.scale_y *= factor
         
     def contains(self, point):
         """检查点是否在图形内，考虑变换"""
@@ -114,7 +116,7 @@ class Shape:
         # 反向应用变换（位置、旋转、缩放）
         transform.translate(self.position.x(), self.position.y())
         transform.rotate(self.rotation)
-        transform.scale(self.scale_factor, self.scale_factor)
+        transform.scale(self.scale_x, self.scale_y)
         # 计算逆变换
         inverted, success = transform.inverted()
         if not success:
@@ -135,7 +137,7 @@ class Shape:
         transform = QTransform()
         transform.translate(self.position.x(), self.position.y())
         transform.rotate(self.rotation)
-        transform.scale(self.scale_factor, self.scale_factor)
+        transform.scale(self.scale_x, self.scale_y)
         
         # 变换矩形的四个角点
         path = QPainterPath()
@@ -159,7 +161,7 @@ class Shape:
         # 应用变换
         painter.translate(self.position)
         painter.rotate(self.rotation)
-        painter.scale(self.scale_factor, self.scale_factor)
+        painter.scale(self.scale_x, self.scale_y)
         
         # 设置画笔和画刷
         painter.setPen(self.pen)
@@ -314,7 +316,8 @@ class Rectangle(Shape):
         rect_copy = Rectangle(QRectF(self.rect), self.color, self.fill_color, self.line_width, self.line_style, self.layer)
         rect_copy.position = QPointF(self.position)
         rect_copy.rotation = self.rotation
-        rect_copy.scale_factor = self.scale_factor
+        rect_copy.scale_x = self.scale_x
+        rect_copy.scale_y = self.scale_y
         rect_copy.z_value = self.z_value
         return rect_copy
 
@@ -370,7 +373,8 @@ class Circle(Shape):
         circle_copy = Circle(QPointF(self.center), self.radius, self.color, self.fill_color, self.line_width, self.line_style, self.layer)
         circle_copy.position = QPointF(self.position)
         circle_copy.rotation = self.rotation
-        circle_copy.scale_factor = self.scale_factor
+        circle_copy.scale_x = self.scale_x
+        circle_copy.scale_y = self.scale_y
         circle_copy.z_value = self.z_value
         return circle_copy
 
@@ -476,7 +480,8 @@ class ArchimedeanSpiral(Shape):
         spiral_copy = ArchimedeanSpiral(QPointF(self.center), self.a, self.b, self.turns, self.color, self.fill_color, self.line_width, self.line_style, self.layer)
         spiral_copy.position = QPointF(self.position)
         spiral_copy.rotation = self.rotation
-        spiral_copy.scale_factor = self.scale_factor
+        spiral_copy.scale_x = self.scale_x
+        spiral_copy.scale_y = self.scale_y
         spiral_copy.z_value = self.z_value
         return spiral_copy
 
@@ -558,7 +563,8 @@ class SineCurve(Shape):
         sine_copy = SineCurve(QPointF(self.start), self.amplitude, self.frequency, self.length, self.color, self.fill_color, self.line_width, self.line_style, self.layer)
         sine_copy.position = QPointF(self.position)
         sine_copy.rotation = self.rotation
-        sine_copy.scale_factor = self.scale_factor
+        sine_copy.scale_x = self.scale_x
+        sine_copy.scale_y = self.scale_y
         sine_copy.z_value = self.z_value
         return sine_copy
 
@@ -663,7 +669,8 @@ class Freehand(Shape):
         freehand_copy.points = [QPointF(p) for p in self.points]
         freehand_copy.position = QPointF(self.position)
         freehand_copy.rotation = self.rotation
-        freehand_copy.scale_factor = self.scale_factor
+        freehand_copy.scale_x = self.scale_x
+        freehand_copy.scale_y = self.scale_y
         freehand_copy.z_value = self.z_value
         return freehand_copy
 
