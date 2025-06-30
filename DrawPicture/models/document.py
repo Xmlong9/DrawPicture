@@ -11,6 +11,7 @@ class DrawingDocument(QObject):
     
     # 定义信号
     document_changed = pyqtSignal()  # 文档内容发生变化
+    document_saved = pyqtSignal(str)  # 文档保存信号，参数为保存路径
     selection_changed = pyqtSignal()  # 选择变化
     layers_changed = pyqtSignal()  # 图层变化
     
@@ -450,6 +451,7 @@ class DrawingDocument(QObject):
                 
             self.file_path = filepath
             self.set_modified(False)
+            self.document_saved.emit(filepath)
             return True
         except Exception as e:
             print(f"保存文件失败: {str(e)}")

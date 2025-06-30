@@ -58,12 +58,32 @@ class DocumentController(QObject):
     def save_document_as(self, parent_widget=None):
         """另存为文档"""
         if parent_widget:
-            file_path, _ = QFileDialog.getSaveFileName(
-                parent_widget, "保存文件", "", "绘图文件 (*.draw);;所有文件 (*)"
+            file_path, filter_type = QFileDialog.getSaveFileName(
+                parent_widget, "保存文件", "", 
+                "绘图文件 (*.draw);;PNG图片 (*.png);;JPEG图片 (*.jpg *.jpeg);;BMP图片 (*.bmp);;TIFF图片 (*.tiff);;WebP图片 (*.webp);;SVG图片 (*.svg);;所有文件 (*)"
             )
             
             if file_path:
-                if not file_path.lower().endswith('.draw'):
+                # 设置默认扩展名
+                if "PNG" in filter_type and not file_path.lower().endswith('.png'):
+                    file_path += ".png"
+                    return self.export_image(parent_widget, parent_widget.canvas)
+                elif "JPEG" in filter_type and not file_path.lower().endswith(('.jpg', '.jpeg')):
+                    file_path += ".jpg"
+                    return self.export_image(parent_widget, parent_widget.canvas)
+                elif "BMP" in filter_type and not file_path.lower().endswith('.bmp'):
+                    file_path += ".bmp"
+                    return self.export_image(parent_widget, parent_widget.canvas)
+                elif "TIFF" in filter_type and not file_path.lower().endswith('.tiff'):
+                    file_path += ".tiff"
+                    return self.export_image(parent_widget, parent_widget.canvas)
+                elif "WebP" in filter_type and not file_path.lower().endswith('.webp'):
+                    file_path += ".webp"
+                    return self.export_image(parent_widget, parent_widget.canvas)
+                elif "SVG" in filter_type and not file_path.lower().endswith('.svg'):
+                    file_path += ".svg"
+                    return self.export_image(parent_widget, parent_widget.canvas)
+                elif not file_path.lower().endswith('.draw'):
                     file_path += ".draw"
                     
                 if self.document.save(file_path):
@@ -76,10 +96,10 @@ class DocumentController(QObject):
         
     def export_image(self, parent_widget, canvas):
         """导出为图片"""
-        if parent_widget:
+        if parent_widget and canvas:
             file_path, filter_type = QFileDialog.getSaveFileName(
                 parent_widget, "导出图片", "", 
-                "PNG图片 (*.png);;JPEG图片 (*.jpg);;BMP图片 (*.bmp);;所有文件 (*)"
+                "PNG图片 (*.png);;JPEG图片 (*.jpg *.jpeg);;BMP图片 (*.bmp);;TIFF图片 (*.tiff);;WebP图片 (*.webp);;SVG图片 (*.svg);;ICO图标 (*.ico);;所有文件 (*)"
             )
             
             if file_path:
@@ -90,17 +110,50 @@ class DocumentController(QObject):
                     file_path += ".jpg"
                 elif "BMP" in filter_type and not file_path.lower().endswith('.bmp'):
                     file_path += ".bmp"
+                elif "TIFF" in filter_type and not file_path.lower().endswith('.tiff'):
+                    file_path += ".tiff"
+                elif "WebP" in filter_type and not file_path.lower().endswith('.webp'):
+                    file_path += ".webp"
+                elif "SVG" in filter_type and not file_path.lower().endswith('.svg'):
+                    file_path += ".svg"
+                elif "ICO" in filter_type and not file_path.lower().endswith('.ico'):
+                    file_path += ".ico"
                 
-                # 创建图像并渲染画布内容
-                image = QImage(canvas.size(), QImage.Format_ARGB32)
+                # 创建高分辨率图像
+                canvas_size = canvas.size()
+                scale_factor = 2.0  # 2倍分辨率
+                image = QImage(canvas_size.width() * scale_factor, 
+                             canvas_size.height() * scale_factor,
+                             QImage.Format_ARGB32)
                 image.fill(QColor(255, 255, 255))
                 
+                # 使用高质量渲染
                 painter = QPainter(image)
+                painter.setRenderHint(QPainter.Antialiasing)
+                painter.setRenderHint(QPainter.SmoothPixmapTransform)
+                painter.setRenderHint(QPainter.TextAntialiasing)
+                
+                # 应用缩放以提高分辨率
+                painter.scale(scale_factor, scale_factor)
                 canvas.render(painter)
                 painter.end()
                 
-                if image.save(file_path):
-                    QMessageBox.information(parent_widget, "导出成功", f"图片已导出到: {file_path}")
+                # 根据文件类型设置保存选项
+                save_options = {}
+                if file_path.lower().endswith(('.jpg', '.jpeg')):
+                    save_options['quality'] = 95  # JPEG质量设置（0-100）
+                elif file_path.lower().endswith('.png'):
+                    save_options['quality'] = 100  # PNG质量设置（0-100）
+                    save_options['compression'] = 1  # PNG压缩级别（0-9）
+                elif file_path.lower().endswith('.webp'):
+                    save_options['quality'] = 95  # WebP质量设置（0-100）
+                elif file_path.lower().endswith('.tiff'):
+                    save_options['compression'] = 'lzw'  # TIFF压缩方式
+                
+                # 保存图片
+                if image.save(file_path, quality=save_options.get('quality', -1)):
+                    QMessageBox.information(parent_widget, "导出成功", 
+                                         f"图片已导出到: {file_path}\n分辨率: {image.width()}x{image.height()}")
                     return True
                 else:
                     QMessageBox.warning(parent_widget, "导出失败", "无法导出图片。")

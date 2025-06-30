@@ -32,6 +32,48 @@ class Shape:
         self.scale_factor = 1.0  # 缩放因子
         self.z_value = 0  # z顺序，用于图层排序
         
+    def __getstate__(self):
+        """序列化时调用"""
+        state = self.__dict__.copy()
+        # 保存QPen的属性
+        state['pen_color'] = self.pen.color().rgba()
+        state['pen_width'] = self.pen.width()
+        state['pen_style'] = int(self.pen.style())
+        # 保存QBrush的属性
+        state['brush_color'] = self.brush.color().rgba()
+        state['brush_style'] = int(self.brush.style())
+        # 保存QPointF的属性
+        state['position_x'] = self.position.x()
+        state['position_y'] = self.position.y()
+        # 删除无法序列化的对象
+        del state['pen']
+        del state['brush']
+        del state['position']
+        return state
+        
+    def __setstate__(self, state):
+        """反序列化时调用"""
+        # 恢复QPen
+        pen_color = QColor()
+        pen_color.setRgba(state.pop('pen_color'))
+        pen_width = state.pop('pen_width')
+        pen_style = Qt.PenStyle(state.pop('pen_style'))
+        self.pen = QPen(pen_color, pen_width, pen_style)
+        
+        # 恢复QBrush
+        brush_color = QColor()
+        brush_color.setRgba(state.pop('brush_color'))
+        brush_style = Qt.BrushStyle(state.pop('brush_style'))
+        self.brush = QBrush(brush_color, brush_style)
+        
+        # 恢复QPointF
+        x = state.pop('position_x')
+        y = state.pop('position_y')
+        self.position = QPointF(x, y)
+        
+        # 恢复其他属性
+        self.__dict__.update(state)
+        
     def set_pen(self, pen):
         self.pen = pen
         
@@ -154,6 +196,31 @@ class Line(Shape):
         self.start_point = start
         self.end_point = end
         
+    def __getstate__(self):
+        """序列化时调用"""
+        state = super().__getstate__()
+        # 保存QPointF的属性
+        state['start_x'] = self.start_point.x()
+        state['start_y'] = self.start_point.y()
+        state['end_x'] = self.end_point.x()
+        state['end_y'] = self.end_point.y()
+        # 删除无法序列化的对象
+        del state['start_point']
+        del state['end_point']
+        return state
+        
+    def __setstate__(self, state):
+        """反序列化时调用"""
+        # 恢复QPointF
+        start_x = state.pop('start_x')
+        start_y = state.pop('start_y')
+        end_x = state.pop('end_x')
+        end_y = state.pop('end_y')
+        self.start_point = QPointF(start_x, start_y)
+        self.end_point = QPointF(end_x, end_y)
+        # 恢复其他属性
+        super().__setstate__(state)
+        
     def _draw(self, painter):
         painter.drawLine(self.start_point, self.end_point)
         
@@ -208,6 +275,29 @@ class Rectangle(Shape):
         super().__init__(color, fill_color, line_width, line_style, layer)
         self.rect = rect
         
+    def __getstate__(self):
+        """序列化时调用"""
+        state = super().__getstate__()
+        # 保存QRectF的属性
+        state['rect_x'] = self.rect.x()
+        state['rect_y'] = self.rect.y()
+        state['rect_width'] = self.rect.width()
+        state['rect_height'] = self.rect.height()
+        # 删除无法序列化的对象
+        del state['rect']
+        return state
+        
+    def __setstate__(self, state):
+        """反序列化时调用"""
+        # 恢复QRectF
+        x = state.pop('rect_x')
+        y = state.pop('rect_y')
+        width = state.pop('rect_width')
+        height = state.pop('rect_height')
+        self.rect = QRectF(x, y, width, height)
+        # 恢复其他属性
+        super().__setstate__(state)
+        
     def _draw(self, painter):
         painter.drawRect(self.rect)
         
@@ -222,7 +312,10 @@ class Rectangle(Shape):
     def clone(self):
         """创建矩形的副本"""
         rect_copy = Rectangle(QRectF(self.rect), self.color, self.fill_color, self.line_width, self.line_style, self.layer)
-        rect_copy.selected = False
+        rect_copy.position = QPointF(self.position)
+        rect_copy.rotation = self.rotation
+        rect_copy.scale_factor = self.scale_factor
+        rect_copy.z_value = self.z_value
         return rect_copy
 
 
@@ -233,6 +326,27 @@ class Circle(Shape):
         self.center = center
         self.radius = radius
         
+    def __getstate__(self):
+        """序列化时调用"""
+        state = super().__getstate__()
+        # 保存QPointF的属性
+        state['center_x'] = self.center.x()
+        state['center_y'] = self.center.y()
+        state['radius'] = self.radius
+        # 删除无法序列化的对象
+        del state['center']
+        return state
+        
+    def __setstate__(self, state):
+        """反序列化时调用"""
+        # 恢复QPointF和半径
+        center_x = state.pop('center_x')
+        center_y = state.pop('center_y')
+        self.center = QPointF(center_x, center_y)
+        self.radius = state.pop('radius')
+        # 恢复其他属性
+        super().__setstate__(state)
+        
     def _draw(self, painter):
         painter.drawEllipse(self.center, self.radius, self.radius)
         
@@ -240,32 +354,54 @@ class Circle(Shape):
         """检查点是否在圆内"""
         dx = point.x() - self.center.x()
         dy = point.y() - self.center.y()
-        return dx*dx + dy*dy <= self.radius*self.radius
+        return (dx * dx + dy * dy) <= (self.radius * self.radius)
         
     def bounding_rect(self):
         """获取圆的边界矩形"""
         return QRectF(
             self.center.x() - self.radius,
             self.center.y() - self.radius,
-            2 * self.radius,
-            2 * self.radius
+            self.radius * 2,
+            self.radius * 2
         )
         
     def clone(self):
-        """创建圆的副本"""
+        """创建圆形的副本"""
         circle_copy = Circle(QPointF(self.center), self.radius, self.color, self.fill_color, self.line_width, self.line_style, self.layer)
-        circle_copy.selected = False
+        circle_copy.position = QPointF(self.position)
+        circle_copy.rotation = self.rotation
+        circle_copy.scale_factor = self.scale_factor
+        circle_copy.z_value = self.z_value
         return circle_copy
 
 
 class ArchimedeanSpiral(Shape):
-    """阿基米德螺线"""
+    """阿基米德螺旋线"""
     def __init__(self, center=QPointF(0, 0), a=0.25, b=0.25, turns=3, color=None, fill_color=None, line_width=1, line_style=Qt.SolidLine, layer="默认图层"):
         super().__init__(color, fill_color, line_width, line_style, layer)
         self.center = center
-        self.a = a  # 螺线参数
-        self.b = b  # 螺线参数
-        self.turns = turns  # 螺线的圈数
+        self.a = a  # 螺旋线参数a
+        self.b = b  # 螺旋线参数b
+        self.turns = turns  # 螺旋线圈数
+        
+    def __getstate__(self):
+        """序列化时调用"""
+        state = super().__getstate__()
+        # 保存QPointF的属性
+        state['center_x'] = self.center.x()
+        state['center_y'] = self.center.y()
+        # 删除无法序列化的对象
+        del state['center']
+        return state
+        
+    def __setstate__(self, state):
+        """反序列化时调用"""
+        # 恢复QPointF
+        center_x = state.pop('center_x')
+        center_y = state.pop('center_y')
+        self.center = QPointF(center_x, center_y)
+        # 恢复其他属性
+        super().__setstate__(state)
         
     def _draw(self, painter):
         path = QPainterPath()
@@ -336,9 +472,12 @@ class ArchimedeanSpiral(Shape):
         )
         
     def clone(self):
-        """创建螺线的副本"""
+        """创建螺旋线的副本"""
         spiral_copy = ArchimedeanSpiral(QPointF(self.center), self.a, self.b, self.turns, self.color, self.fill_color, self.line_width, self.line_style, self.layer)
-        spiral_copy.selected = False
+        spiral_copy.position = QPointF(self.position)
+        spiral_copy.rotation = self.rotation
+        spiral_copy.scale_factor = self.scale_factor
+        spiral_copy.z_value = self.z_value
         return spiral_copy
 
 
@@ -346,10 +485,29 @@ class SineCurve(Shape):
     """正弦曲线"""
     def __init__(self, start=QPointF(0, 0), amplitude=50, frequency=0.05, length=400, color=None, fill_color=None, line_width=1, line_style=Qt.SolidLine, layer="默认图层"):
         super().__init__(color, fill_color, line_width, line_style, layer)
-        self.start_point = start
+        self.start = start
         self.amplitude = amplitude
         self.frequency = frequency
         self.length = length
+        
+    def __getstate__(self):
+        """序列化时调用"""
+        state = super().__getstate__()
+        # 保存QPointF的属性
+        state['start_x'] = self.start.x()
+        state['start_y'] = self.start.y()
+        # 删除无法序列化的对象
+        del state['start']
+        return state
+        
+    def __setstate__(self, state):
+        """反序列化时调用"""
+        # 恢复QPointF
+        start_x = state.pop('start_x')
+        start_y = state.pop('start_y')
+        self.start = QPointF(start_x, start_y)
+        # 恢复其他属性
+        super().__setstate__(state)
         
     def _draw(self, painter):
         path = QPainterPath()
@@ -363,10 +521,10 @@ class SineCurve(Shape):
             y = self.amplitude * math.sin(x * self.frequency)
             
             if first_point:
-                path.moveTo(x + self.start_point.x(), y + self.start_point.y())
+                path.moveTo(x + self.start.x(), y + self.start.y())
                 first_point = False
             else:
-                path.lineTo(x + self.start_point.x(), y + self.start_point.y())
+                path.lineTo(x + self.start.x(), y + self.start.y())
         
         # 使用抗锯齿绘制
         painter.setRenderHint(QPainter.Antialiasing, True)
@@ -375,12 +533,12 @@ class SineCurve(Shape):
     def _contains_local(self, point):
         """检查点是否在正弦曲线上或附近"""
         # 检查点是否在曲线的横向范围内
-        if point.x() < self.start_point.x() or point.x() > self.start_point.x() + self.length:
+        if point.x() < self.start.x() or point.x() > self.start.x() + self.length:
             return False
             
         # 计算在x位置的正弦值
-        x_local = point.x() - self.start_point.x()
-        expected_y = self.amplitude * math.sin(x_local * self.frequency) + self.start_point.y()
+        x_local = point.x() - self.start.x()
+        expected_y = self.amplitude * math.sin(x_local * self.frequency) + self.start.y()
         
         # 检查点是否在曲线附近
         tolerance = 5.0  # 点击容差
@@ -389,24 +547,46 @@ class SineCurve(Shape):
     def bounding_rect(self):
         """获取正弦曲线的边界矩形"""
         return QRectF(
-            self.start_point.x(),
-            self.start_point.y() - self.amplitude,
+            self.start.x(),
+            self.start.y() - self.amplitude,
             self.length,
             2 * self.amplitude
         )
         
     def clone(self):
         """创建正弦曲线的副本"""
-        curve_copy = SineCurve(QPointF(self.start_point), self.amplitude, self.frequency, self.length, self.color, self.fill_color, self.line_width, self.line_style, self.layer)
-        curve_copy.selected = False
-        return curve_copy
+        sine_copy = SineCurve(QPointF(self.start), self.amplitude, self.frequency, self.length, self.color, self.fill_color, self.line_width, self.line_style, self.layer)
+        sine_copy.position = QPointF(self.position)
+        sine_copy.rotation = self.rotation
+        sine_copy.scale_factor = self.scale_factor
+        sine_copy.z_value = self.z_value
+        return sine_copy
 
 
 class Freehand(Shape):
     """自由绘制"""
     def __init__(self, color=None, fill_color=None, line_width=1, line_style=Qt.SolidLine, layer="默认图层"):
         super().__init__(color, fill_color, line_width, line_style, layer)
-        self.points = []  # 点列表
+        self.points = []
+        
+    def __getstate__(self):
+        """序列化时调用"""
+        state = super().__getstate__()
+        # 保存QPointF列表的属性
+        state['points_x'] = [p.x() for p in self.points]
+        state['points_y'] = [p.y() for p in self.points]
+        # 删除无法序列化的对象
+        del state['points']
+        return state
+        
+    def __setstate__(self, state):
+        """反序列化时调用"""
+        # 恢复QPointF列表
+        points_x = state.pop('points_x')
+        points_y = state.pop('points_y')
+        self.points = [QPointF(x, y) for x, y in zip(points_x, points_y)]
+        # 恢复其他属性
+        super().__setstate__(state)
         
     def add_point(self, point):
         self.points.append(point)
@@ -478,19 +658,32 @@ class Freehand(Shape):
         return QRectF(min_x, min_y, max_x - min_x, max_y - min_y)
         
     def clone(self):
-        """创建自由绘制线条的副本"""
+        """创建自由绘制的副本"""
         freehand_copy = Freehand(self.color, self.fill_color, self.line_width, self.line_style, self.layer)
-        for point in self.points:
-            freehand_copy.add_point(QPointF(point))
-        freehand_copy.selected = False
+        freehand_copy.points = [QPointF(p) for p in self.points]
+        freehand_copy.position = QPointF(self.position)
+        freehand_copy.rotation = self.rotation
+        freehand_copy.scale_factor = self.scale_factor
+        freehand_copy.z_value = self.z_value
         return freehand_copy
 
 
 class ShapeGroup(Shape):
-    """图形组合"""
+    """图形组"""
     def __init__(self, color=None, fill_color=None, line_width=1, line_style=Qt.SolidLine, layer="默认图层"):
         super().__init__(color, fill_color, line_width, line_style, layer)
-        self.shapes = []  # 子图形列表
+        self.shapes = []
+        
+    def __getstate__(self):
+        """序列化时调用"""
+        state = super().__getstate__()
+        # shapes列表中的每个图形都会自动调用其__getstate__方法
+        return state
+        
+    def __setstate__(self, state):
+        """反序列化时调用"""
+        super().__setstate__(state)
+        # shapes列表中的每个图形都会自动调用其__setstate__方法
         
     def add(self, shape):
         self.shapes.append(shape)
@@ -526,9 +719,11 @@ class ShapeGroup(Shape):
         return QRectF(min_x, min_y, max_x - min_x, max_y - min_y)
         
     def clone(self):
-        """创建组合图形的副本"""
+        """创建图形组的副本"""
         group_copy = ShapeGroup(self.color, self.fill_color, self.line_width, self.line_style, self.layer)
-        for shape in self.shapes:
-            group_copy.add(shape.clone())
-        group_copy.selected = False
+        group_copy.shapes = [shape.clone() for shape in self.shapes]
+        group_copy.position = QPointF(self.position)
+        group_copy.rotation = self.rotation
+        group_copy.scale_factor = self.scale_factor
+        group_copy.z_value = self.z_value
         return group_copy 
