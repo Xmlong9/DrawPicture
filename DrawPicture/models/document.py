@@ -134,8 +134,8 @@ class DrawingDocument(QObject):
         """旋转选中的图形"""
         if not self.selected_shapes:
             return
-        
-        self.record_state()
+            
+            self.record_state()
         
         for shape in self.selected_shapes:
             shape.rotate(angle)
@@ -147,8 +147,8 @@ class DrawingDocument(QObject):
         """缩放选中的图形"""
         if not self.selected_shapes:
             return
-        
-        self.record_state()
+            
+            self.record_state()
         
         for shape in self.selected_shapes:
             shape.scale(factor)
@@ -185,9 +185,8 @@ class DrawingDocument(QObject):
         """删除选中的图形"""
         if not self.selected_shapes:
             return
-        
-        self.record_state()
-        
+            
+            self.record_state()
         for shape in self.selected_shapes:
             if shape in self.shapes:
                 self.shapes.remove(shape)

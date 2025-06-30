@@ -477,15 +477,8 @@ class EraserTool(DrawingTool):
 
 
 class ColorTool:
-    """颜色工具类，用于设置图形的颜色"""
-    
+    """颜色工具类，用于管理线条颜色和填充颜色"""
     def __init__(self):
-        # 颜色相关属性
-        self.fill_color = QColor(255, 255, 255, 255)  # 默认填充颜色：白色
-        self.pen_color = QColor(0, 0, 0, 255)  # 默认线条颜色：黑色
-        self.line_width = 2  # 默认线宽
-        self.line_style = Qt.SolidLine  # 默认线型
-        
         # 预定义颜色
         self.predefined_colors = [
             QColor(0, 0, 0),       # 黑色
@@ -502,46 +495,84 @@ class ColorTool:
             QColor(128, 0, 128)    # 紫色
         ]
         
-        # 渐变填充相关属性
-        self.use_gradient_fill = False
-        self.gradient_fill_start_color = QColor(255, 255, 0)  # 默认渐变起始颜色：黄色
-        self.gradient_fill_end_color = QColor(0, 255, 0)  # 默认渐变结束颜色：绿色
-        self.gradient_fill_type = 0  # 0: 线性渐变, 1: 径向渐变
-        self.gradient_fill_direction = 0  # 0: 水平, 1: 垂直, 2: 对角线
+        self.line_color = QColor(0, 0, 0)  # 默认线条颜色为黑色
         
-        # 渐变线条相关属性
-        self.use_gradient_pen = False
-        self.gradient_pen_start_color = QColor(255, 0, 0)  # 默认渐变起始颜色：红色
-        self.gradient_pen_end_color = QColor(0, 0, 255)  # 默认渐变结束颜色：蓝色
-        self.gradient_pen_type = 0  # 0: 线性渐变, 1: 径向渐变
-        self.gradient_pen_direction = 0  # 0: 水平, 1: 垂直, 2: 对角线
-    
+        # 创建透明填充颜色
+        self.fill_color = QColor(255, 255, 255, 0)  # 完全透明的白色
+        
+        self.line_width = 2  # 默认线宽
+        self.line_style = Qt.SolidLine  # 默认线型
+        
+        # 渐变色相关
+        self.use_gradient_fill = False  # 是否使用渐变填充
+        self.gradient_start_color = QColor(255, 255, 255)  # 渐变起始颜色
+        self.gradient_end_color = QColor(0, 0, 0)  # 渐变结束颜色
+        self.gradient_type = 0  # 0: 线性渐变, 1: 径向渐变
+        self.gradient_direction = 0  # 0: 水平, 1: 垂直, 2: 对角线
+        
+    def get_pen(self):
+        """获取当前画笔"""
+        pen = QPen(self.line_color, self.line_width, self.line_style)
+        return pen
+        
+    def get_brush(self):
+        """获取当前画刷"""
+        if not self.use_gradient_fill:
+            return QBrush(self.fill_color)
+        
+        # 创建渐变
+        if self.gradient_type == 0:  # 线性渐变
+            gradient = QLinearGradient()
+            # 设置渐变方向
+            if self.gradient_direction == 0:  # 水平
+                gradient.setStart(0, 0.5)
+                gradient.setFinalStop(1, 0.5)
+            elif self.gradient_direction == 1:  # 垂直
+                gradient.setStart(0.5, 0)
+                gradient.setFinalStop(0.5, 1)
+            else:  # 对角线
+                gradient.setStart(0, 0)
+                gradient.setFinalStop(1, 1)
+        else:  # 径向渐变
+            gradient = QRadialGradient(0.5, 0.5, 0.5)
+        
+        # 设置渐变颜色
+        gradient.setColorAt(0, self.gradient_start_color)
+        gradient.setColorAt(1, self.gradient_end_color)
+        
+        # 设置渐变坐标模式为相对对象边界矩形
+        gradient.setCoordinateMode(QGradient.ObjectBoundingMode)
+        
+        return QBrush(gradient)
+        
+    def set_line_color(self, color):
+        """设置线条颜色"""
+        self.line_color = color
+        
     def set_fill_color(self, color):
         """设置填充颜色"""
         self.fill_color = color
-        self.use_gradient_fill = False  # 使用纯色填充时，禁用渐变填充
-    
-    def set_pen_color(self, color):
-        """设置线条颜色"""
-        self.pen_color = color
-        self.use_gradient_pen = False  # 使用纯色线条时，禁用渐变线条
-    
-    def set_gradient_fill(self, start_color, end_color, gradient_type, direction):
-        """设置渐变填充"""
-        self.gradient_fill_start_color = start_color
-        self.gradient_fill_end_color = end_color
-        self.gradient_fill_type = gradient_type
-        self.gradient_fill_direction = direction
+        self.use_gradient_fill = False  # 切换回普通填充
+        
+    def set_gradient_fill(self, start_color, end_color, gradient_type=0, direction=0):
+        """设置渐变填充
+        
+        参数:
+            start_color: 起始颜色
+            end_color: 结束颜色
+            gradient_type: 渐变类型 (0: 线性, 1: 径向)
+            direction: 渐变方向 (0: 水平, 1: 垂直, 2: 对角线)
+        """
+        self.gradient_start_color = start_color
+        self.gradient_end_color = end_color
+        self.gradient_type = gradient_type
+        self.gradient_direction = direction
         self.use_gradient_fill = True
-    
-    def set_gradient_pen(self, start_color, end_color, gradient_type, direction):
-        """设置渐变线条"""
-        self.gradient_pen_start_color = start_color
-        self.gradient_pen_end_color = end_color
-        self.gradient_pen_type = gradient_type
-        self.gradient_pen_direction = direction
-        self.use_gradient_pen = True
-    
+        
+    def disable_gradient(self):
+        """禁用渐变填充"""
+        self.use_gradient_fill = False
+        
     def set_line_width(self, width):
         """设置线宽"""
         self.line_width = width
@@ -549,95 +580,6 @@ class ColorTool:
     def set_line_style(self, style):
         """设置线型"""
         self.line_style = style
-    
-    def get_pen(self):
-        """获取当前画笔"""
-        pen = QPen()
-        pen.setWidth(self.line_width)
-        pen.setStyle(self.line_style)
-        
-        if self.use_gradient_pen:
-            # 创建线条渐变
-            # 注意：这里返回的是一个基本的画笔，实际渐变会在apply_to_painter中应用
-            pen.setColor(self.gradient_pen_start_color)
-        else:
-            # 使用纯色
-            pen.setColor(self.pen_color)
-        
-        return pen
-    
-    def get_brush(self):
-        """获取当前画刷"""
-        if self.use_gradient_fill:
-            # 创建一个基本的画刷，实际渐变会在apply_to_painter中应用
-            return QBrush(self.gradient_fill_start_color)
-        else:
-            # 使用纯色
-            return QBrush(self.fill_color)
-    
-    def apply_to_painter(self, painter, rect):
-        """将颜色设置应用到画笔上"""
-        # 设置画笔（线条）
-        pen = QPen()
-        pen.setWidth(self.line_width)
-        pen.setStyle(self.line_style)
-        
-        if self.use_gradient_pen:
-            # 创建线条渐变
-            if self.gradient_pen_type == 0:  # 线性渐变
-                gradient = QLinearGradient()
-                # 根据方向设置渐变的起点和终点
-                if self.gradient_pen_direction == 0:  # 水平
-                    gradient.setStart(rect.left(), rect.center().y())
-                    gradient.setFinalStop(rect.right(), rect.center().y())
-                elif self.gradient_pen_direction == 1:  # 垂直
-                    gradient.setStart(rect.center().x(), rect.top())
-                    gradient.setFinalStop(rect.center().x(), rect.bottom())
-                else:  # 对角线
-                    gradient.setStart(rect.topLeft())
-                    gradient.setFinalStop(rect.bottomRight())
-            else:  # 径向渐变
-                gradient = QRadialGradient(rect.center(), min(rect.width(), rect.height()) / 2)
-            
-            # 设置渐变颜色
-            gradient.setColorAt(0, self.gradient_pen_start_color)
-            gradient.setColorAt(1, self.gradient_pen_end_color)
-            
-            # 应用渐变到画笔
-            pen.setBrush(QBrush(gradient))
-        else:
-            # 使用纯色
-            pen.setColor(self.pen_color)
-        
-        painter.setPen(pen)
-        
-        # 设置画刷（填充）
-        if self.use_gradient_fill:
-            # 创建填充渐变
-            if self.gradient_fill_type == 0:  # 线性渐变
-                gradient = QLinearGradient()
-                # 根据方向设置渐变的起点和终点
-                if self.gradient_fill_direction == 0:  # 水平
-                    gradient.setStart(rect.left(), rect.center().y())
-                    gradient.setFinalStop(rect.right(), rect.center().y())
-                elif self.gradient_fill_direction == 1:  # 垂直
-                    gradient.setStart(rect.center().x(), rect.top())
-                    gradient.setFinalStop(rect.center().x(), rect.bottom())
-                else:  # 对角线
-                    gradient.setStart(rect.topLeft())
-                    gradient.setFinalStop(rect.bottomRight())
-            else:  # 径向渐变
-                gradient = QRadialGradient(rect.center(), min(rect.width(), rect.height()) / 2)
-            
-            # 设置渐变颜色
-            gradient.setColorAt(0, self.gradient_fill_start_color)
-            gradient.setColorAt(1, self.gradient_fill_end_color)
-            
-            # 应用渐变到画刷
-            painter.setBrush(QBrush(gradient))
-        else:
-            # 使用纯色
-            painter.setBrush(QBrush(self.fill_color))
 
 
 class PanTool(DrawingTool):
