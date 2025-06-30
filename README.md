@@ -22,21 +22,12 @@ DrawPicture是一个功能强大的绘图应用程序，使用PyQt5开发，提�
 
 ## 安装
 
-1. 克隆仓库：
+克隆仓库：
 ```bash
 git clone https://github.com/yourusername/DrawPicture.git
 cd DrawPicture
 ```
 
-2. 安装依赖：
-```bash
-pip install -r requirements.txt
-```
-
-3. 运行应用：
-```bash
-python -m DrawPicture.main
-```
 
 ## 系统要求
 
