@@ -340,6 +340,30 @@ class Rectangle(Shape):
         
         return rect_copy
 
+    # 重写_get_global_bounds确保与选择框计算一致
+    def _get_global_bounds(self):
+        """获取图形在全局坐标系中的边界矩形"""
+        # 获取本地边界矩形
+        local_rect = self.bounding_rect()
+        
+        # 添加额外的边距，考虑笔宽
+        margin = max(10, self.pen.width())
+        local_rect = local_rect.adjusted(-margin, -margin, margin, margin)
+        
+        # 创建变换矩阵
+        transform = QTransform()
+        transform.translate(self.position.x(), self.position.y())
+        transform.rotate(self.rotation)
+        transform.scale(self.scale_x, self.scale_y)
+        
+        # 变换矩形的四个角点
+        path = QPainterPath()
+        path.addRect(local_rect)
+        transformed_path = transform.map(path)
+        
+        # 返回变换后路径的边界矩形
+        return transformed_path.boundingRect()
+
 
 class Circle(Shape):
     """圆形"""
