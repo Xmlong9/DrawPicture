@@ -2,7 +2,8 @@
 # -*- coding: utf-8 -*-
 
 from PyQt5.QtCore import Qt, QRectF, QPointF, QPoint
-from PyQt5.QtGui import QPen, QBrush, QColor, QCursor, QPixmap, QPainterPath, QPainter
+from PyQt5.QtGui import (QPen, QBrush, QColor, QCursor, QPixmap, QPainterPath, QPainter,
+                       QLinearGradient, QRadialGradient, QGradient)
 from PyQt5.QtWidgets import QApplication
 import math
 
@@ -753,23 +754,115 @@ class ColorTool:
         self.line_width = 2  # 默认线宽
         self.line_style = Qt.SolidLine  # 默认线型
         
+        # 渐变色相关
+        self.use_gradient_fill = False  # 是否使用渐变填充
+        self.use_gradient_line = False  # 是否使用渐变线条
+        self.gradient_start_color = QColor(255, 255, 255)  # 渐变起始颜色
+        self.gradient_end_color = QColor(0, 0, 0)  # 渐变结束颜色
+        self.gradient_type = 0  # 0: 线性渐变, 1: 径向渐变
+        self.gradient_direction = 0  # 0: 水平, 1: 垂直, 2: 对角线
+        
     def get_pen(self):
         """获取当前画笔"""
         pen = QPen(self.line_color, self.line_width, self.line_style)
+        
+        # 如果启用了线条渐变，则应用渐变
+        if self.use_gradient_line:
+            # 创建与get_brush相同的渐变
+            if self.gradient_type == 0:  # 线性渐变
+                gradient = QLinearGradient()
+                # 设置渐变方向
+                if self.gradient_direction == 0:  # 水平
+                    gradient.setStart(0, 0.5)
+                    gradient.setFinalStop(1, 0.5)
+                elif self.gradient_direction == 1:  # 垂直
+                    gradient.setStart(0.5, 0)
+                    gradient.setFinalStop(0.5, 1)
+                else:  # 对角线
+                    gradient.setStart(0, 0)
+                    gradient.setFinalStop(1, 1)
+            else:  # 径向渐变
+                gradient = QRadialGradient(0.5, 0.5, 0.5)
+            
+            # 设置渐变颜色
+            gradient.setColorAt(0, self.gradient_start_color)
+            gradient.setColorAt(1, self.gradient_end_color)
+            
+            # 设置渐变坐标模式为相对对象边界矩形
+            gradient.setCoordinateMode(QGradient.ObjectBoundingMode)
+            
+            # 设置画笔的画刷为渐变
+            pen.setBrush(QBrush(gradient))
+        
         return pen
         
     def get_brush(self):
         """获取当前画刷"""
-        brush = QBrush(self.fill_color)
-        return brush
+        if not self.use_gradient_fill:
+            return QBrush(self.fill_color)
+        
+        # 创建渐变
+        if self.gradient_type == 0:  # 线性渐变
+            gradient = QLinearGradient()
+            # 设置渐变方向
+            if self.gradient_direction == 0:  # 水平
+                gradient.setStart(0, 0.5)
+                gradient.setFinalStop(1, 0.5)
+            elif self.gradient_direction == 1:  # 垂直
+                gradient.setStart(0.5, 0)
+                gradient.setFinalStop(0.5, 1)
+            else:  # 对角线
+                gradient.setStart(0, 0)
+                gradient.setFinalStop(1, 1)
+        else:  # 径向渐变
+            gradient = QRadialGradient(0.5, 0.5, 0.5)
+        
+        # 设置渐变颜色
+        gradient.setColorAt(0, self.gradient_start_color)
+        gradient.setColorAt(1, self.gradient_end_color)
+        
+        # 设置渐变坐标模式为相对对象边界矩形
+        gradient.setCoordinateMode(QGradient.ObjectBoundingMode)
+        
+        return QBrush(gradient)
         
     def set_line_color(self, color):
         """设置线条颜色"""
         self.line_color = color
+        self.use_gradient_line = False  # 切换回普通线条
         
     def set_fill_color(self, color):
         """设置填充颜色"""
         self.fill_color = color
+        self.use_gradient_fill = False  # 切换回普通填充
+        
+    def set_gradient_fill(self, start_color, end_color, gradient_type=0, direction=0):
+        """设置渐变填充
+        
+        参数:
+            start_color: 起始颜色
+            end_color: 结束颜色
+            gradient_type: 渐变类型 (0: 线性, 1: 径向)
+            direction: 渐变方向 (0: 水平, 1: 垂直, 2: 对角线)
+        """
+        self.gradient_start_color = start_color
+        self.gradient_end_color = end_color
+        self.gradient_type = gradient_type
+        self.gradient_direction = direction
+        # 注意：这里不再自动设置use_gradient_fill为True，需要单独调用enable_gradient_fill
+        
+    def enable_gradient_fill(self, enable=True):
+        """启用或禁用渐变填充"""
+        self.use_gradient_fill = enable
+        
+    def enable_gradient_line(self, enable=True):
+        """启用或禁用渐变线条"""
+        self.use_gradient_line = enable
+        
+    def disable_gradient(self):
+        """禁用所有渐变"""
+        self.use_gradient_fill = False
+        self.use_gradient_line = False
         
     def set_line_width(self, width):
         """设置线宽"""
@@ -777,7 +870,7 @@ class ColorTool:
         
     def set_line_style(self, style):
         """设置线型"""
-        self.line_style = style 
+        self.line_style = style
 
 
 class PanTool(DrawingTool):
