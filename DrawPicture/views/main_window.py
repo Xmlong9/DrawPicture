@@ -2,7 +2,7 @@
 # -*- coding: utf-8 -*-
 
 from PyQt5.QtWidgets import (QMainWindow, QDockWidget, QAction, QFileDialog,
-                         QMessageBox, QToolBar, QHBoxLayout, QWidget, QLabel)
+                         QMessageBox, QToolBar, QHBoxLayout, QWidget, QLabel, QVBoxLayout)
 from PyQt5.QtGui import QPainter, QPen, QPixmap, QIcon, QBrush, QColor, QImage
 from PyQt5.QtCore import Qt, QSize, QPoint, QRect
 
@@ -291,12 +291,11 @@ class MainWindow(QMainWindow):
         """初始化UI"""
         # 创建中央部件
         central_widget = QWidget()
-        central_layout = QHBoxLayout(central_widget)
-        central_layout.setContentsMargins(0, 0, 0, 0)  # 移除边距
+        central_layout = QVBoxLayout(central_widget)
+        central_layout.setContentsMargins(0, 0, 0, 0)
         
         # 创建画布
         self.canvas = Canvas(self.document)
-        self.canvas.set_tool(self.current_tool)
         self.canvas.status_message.connect(self.set_status_message)
         self.canvas.zoom_changed.connect(self._update_zoom_indicator)
         central_layout.addWidget(self.canvas)
@@ -318,6 +317,8 @@ class MainWindow(QMainWindow):
         self.color_panel.line_width_changed.connect(self.on_line_width_changed)
         self.color_panel.line_style_changed.connect(self.on_line_style_changed)
         self.color_panel.eraser_size_changed.connect(self.on_eraser_size_changed)
+        self.color_panel.gradient_changed.connect(self.on_gradient_changed)
+        self.color_panel.gradient_pen_changed.connect(self.on_gradient_pen_changed)
         self.create_dock_widget("颜色与样式", self.color_panel, Qt.LeftDockWidgetArea)
         
         # 创建图层面板
@@ -593,6 +594,28 @@ class MainWindow(QMainWindow):
         # 更新橡皮擦工具的大小设置
         if "eraser" in self.tools:
             self.tools["eraser"].set_eraser_size(size)
+    
+    def on_gradient_changed(self, start_color, end_color, gradient_type, direction):
+        """渐变填充变化处理"""
+        self.color_tool.set_gradient_fill(start_color, end_color, gradient_type, direction)
+        
+        # 应用到选中的图形
+        if self.document.selected_shapes:
+            self.document.record_state()  # 记录状态用于撤销
+            for shape in self.document.selected_shapes:
+                shape.set_brush(self.color_tool.get_brush())
+            self.document.document_changed.emit()  # 更新显示
+            
+    def on_gradient_pen_changed(self, start_color, end_color, gradient_type, direction):
+        """渐变线条变化处理"""
+        self.color_tool.set_gradient_pen(start_color, end_color, gradient_type, direction)
+        
+        # 应用到选中的图形
+        if self.document.selected_shapes:
+            self.document.record_state()  # 记录状态用于撤销
+            for shape in self.document.selected_shapes:
+                shape.set_pen(self.color_tool.get_pen())
+            self.document.document_changed.emit()  # 更新显示
     
     def set_status_message(self, message):
         """设置状态栏消息"""
