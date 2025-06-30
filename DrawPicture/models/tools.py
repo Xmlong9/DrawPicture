@@ -1,14 +1,15 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
 
-from PyQt5.QtCore import Qt, QRectF, QPointF
+from PyQt5.QtCore import Qt, QRectF, QPointF, QPoint
 from PyQt5.QtGui import (QPen, QBrush, QColor, QCursor, QPixmap, QPainterPath, QPainter,
                        QLinearGradient, QRadialGradient, QGradient)
-from PyQt5.QtCore import Qt, QRectF, QPointF, QPoint
-from PyQt5.QtGui import QPen, QBrush, QColor, QCursor, QPixmap
+from PyQt5.QtWidgets import QApplication
 import math
 
-from DrawPicture.models.shapes import Line, Rectangle, Circle, ArchimedeanSpiral, SineCurve, Freehand
+from DrawPicture.models.shapes import (Line, Rectangle, Circle, ArchimedeanSpiral, 
+                                     SineCurve, Freehand, MandelbrotSet, JuliaSet, 
+                                     SuperEllipse, ParametricCurve, Gear, Leaf, Cloud)
 
 # 定义工具类型枚举
 class ToolType:
@@ -21,6 +22,12 @@ class ToolType:
     SINE = "正弦曲线"
     PAN = "平移"
     ERASER = "橡皮擦"
+    SUPERELLIPSE = "超椭圆"
+    PARAMETRIC = "参数曲线"
+    ADVANCED = "高级图形"
+    GEAR = "齿轮"
+    LEAF = "树叶"
+    CLOUD = "云朵"
 
 class DrawingTool:
     """绘图工具基类"""
@@ -72,14 +79,95 @@ class SelectionTool(DrawingTool):
         self.drag_shape = None
         self.cursor = QCursor(Qt.ArrowCursor)
         self.moving = False  # 是否正在移动
-        self.click_threshold = 1  # 点击判定阈值（像素），降低阈值使移动更灵敏
-        self.last_position = None  # 上一次位置，用于计算微小移动
+        self.click_threshold = 1  # 点击判定阈值（像素）
+        self.last_position = None  # 上一次位置
+        
+        # 手柄操作相关
+        self.handle_type = None  # 手柄类型：'move', 'scale', 'rotate'
+        self.handle_index = -1  # 手柄索引
+        self.original_shape_data = None  # 原始图形数据
+        self.transform_center = None  # 变换中心点
+        self.initial_angle = None  # 初始旋转角度
+        
+    def get_handle_at_point(self, point):
+        """获取指定点的手柄类型和索引"""
+        if not self.document.selected_shapes:
+            return None, -1
+            
+        if len(self.document.selected_shapes) != 1:
+            return None, -1
+            
+        shape = self.document.selected_shapes[0]
+        rect = shape._get_global_bounds()
+        
+        # 手柄大小（根据缩放调整）
+        handle_size = 8
+        half_handle = handle_size / 2
+        
+        # 检查旋转手柄
+        rotation_handle_y = rect.top() - 20
+        rotation_handle_x = rect.left() + rect.width() / 2
+        rotation_area = QRectF(
+            rotation_handle_x - handle_size,
+            rotation_handle_y - handle_size,
+            handle_size * 2,
+            handle_size * 2
+        )
+        if rotation_area.contains(point):
+            self.cursor = QCursor(Qt.CrossCursor)
+            return 'rotate', -1
+            
+        # 检查缩放手柄
+        handles = [
+            (rect.left(), rect.top(), Qt.SizeFDiagCursor),  # 左上
+            (rect.left() + rect.width()/2, rect.top(), Qt.SizeVerCursor),  # 上中
+            (rect.right(), rect.top(), Qt.SizeBDiagCursor),  # 右上
+            (rect.right(), rect.top() + rect.height()/2, Qt.SizeHorCursor),  # 右中
+            (rect.right(), rect.bottom(), Qt.SizeFDiagCursor),  # 右下
+            (rect.left() + rect.width()/2, rect.bottom(), Qt.SizeVerCursor),  # 下中
+            (rect.left(), rect.bottom(), Qt.SizeBDiagCursor),  # 左下
+            (rect.left(), rect.top() + rect.height()/2, Qt.SizeHorCursor),  # 左中
+        ]
+        
+        # 检查每个手柄的区域
+        for i, (x, y, cursor_shape) in enumerate(handles):
+            handle_area = QRectF(
+                x - handle_size,
+                y - handle_size,
+                handle_size * 2,
+                handle_size * 2
+            )
+            if handle_area.contains(point):
+                self.cursor = QCursor(cursor_shape)
+                return 'scale', i
+        
+        # 检查是否在图形内部
+        if rect.contains(point):
+            self.cursor = QCursor(Qt.SizeAllCursor)
+            return 'move', -1
+            
+        # 不在任何交互区域时恢复默认光标
+        self.cursor = QCursor(Qt.ArrowCursor)
+        return None, -1
         
     def mouse_press(self, event):
         if event.button() == Qt.LeftButton:
             point = event.pos()
             self.last_position = point
-            self.moving = False
+            
+            # 检查是否点击了手柄
+            handle_type, handle_index = self.get_handle_at_point(point)
+            if handle_type:
+                self.handle_type = handle_type
+                self.handle_index = handle_index
+                self.drag_start = point
+                self.transform_center = self._get_transform_center()
+                self.original_shape_data = self._save_shape_data()
+                
+                if handle_type == 'rotate':
+                    # 计算初始角度
+                    self.initial_angle = self._calculate_angle(point)
+                return
             
             # 获取点击位置的图形
             shape = self.document.get_shape_at(point)
@@ -88,8 +176,9 @@ class SelectionTool(DrawingTool):
             if shape and shape in self.document.selected_shapes:
                 self.drag_start = point
                 self.drag_shape = shape
+                self.handle_type = 'move'
             else:
-                # 否则，选择新图形（如果有）
+                # 选择新图形
                 multi_select = event.modifiers() & Qt.ShiftModifier
                 if shape:
                     self.document.select_shape(shape, multi_select)
@@ -98,39 +187,201 @@ class SelectionTool(DrawingTool):
                 
                 self.drag_start = point
                 self.drag_shape = shape
+                self.handle_type = 'move'
         
     def mouse_move(self, event):
-        if self.drag_start and (event.buttons() & Qt.LeftButton):
-            current_pos = event.pos()
-            # 计算移动距离
-            move_distance = ((current_pos.x() - self.last_position.x()) ** 2 + 
-                           (current_pos.y() - self.last_position.y()) ** 2) ** 0.5
-                           
-            # 只有移动足够距离才判定为拖动，降低阈值使移动更灵敏
-            if move_distance > self.click_threshold or self.moving:
-                self.moving = True
+        current_pos = event.pos()
+        
+        # 如果没有按下鼠标，只更新光标
+        if not event.buttons() & Qt.LeftButton:
+            handle_type, _ = self.get_handle_at_point(current_pos)
+            if handle_type:
+                event.accept()
+            return
+            
+        if not self.drag_start:
+            return
+            
+        if self.handle_type == 'move':
+            # 移动操作
+            if not self.moving:
+                move_distance = ((current_pos.x() - self.last_position.x()) ** 2 + 
+                               (current_pos.y() - self.last_position.y()) ** 2) ** 0.5
+                if move_distance > self.click_threshold:
+                    self.moving = True
+            
+            if self.moving:
                 delta = QPointF(current_pos - self.last_position)
                 self.document.move_selected_shapes(delta)
-                self.last_position = current_pos
-            else:
-                self.last_position = current_pos
-    
+                
+        elif self.handle_type == 'scale':
+            # 缩放操作
+            self._handle_scale(current_pos)
+            
+        elif self.handle_type == 'rotate':
+            # 旋转操作
+            self._handle_rotate(current_pos)
+            
+        self.last_position = current_pos
+        event.accept()  # 接受事件，防止传播
+        
+    def _handle_scale(self, current_pos):
+        """处理缩放操作"""
+        if not self.document.selected_shapes:
+            return
+            
+        shape = self.document.selected_shapes[0]
+        rect = shape._get_global_bounds()
+        center = rect.center()
+        
+        # 计算初始点和当前点相对于中心的向量
+        start_vector = QPointF(self.drag_start.x() - center.x(),
+                             self.drag_start.y() - center.y())
+        current_vector = QPointF(current_pos.x() - center.x(),
+                               current_pos.y() - center.y())
+                               
+        # 保存原始位置和缩放
+        original_pos = shape.position
+        original_scale_x = shape.scale_x
+        original_scale_y = shape.scale_y
+                               
+        # 根据手柄索引确定缩放方向
+        handle_index = self.handle_index
+        constrain = bool(QApplication.keyboardModifiers() & Qt.ShiftModifier)
+        
+        # 计算缩放因子
+        if handle_index in [0, 2, 4, 6]:  # 角落手柄
+            # 计算对角线缩放
+            start_dist = (start_vector.x() ** 2 + start_vector.y() ** 2) ** 0.5
+            current_dist = (current_vector.x() ** 2 + current_vector.y() ** 2) ** 0.5
+            
+            if start_dist > 0:
+                scale_x = current_dist / start_dist
+                scale_y = scale_x if constrain else scale_x
+                
+                # 根据手柄位置调整缩放方向
+                if handle_index in [0, 6]:  # 左侧手柄
+                    scale_x = -scale_x
+                if handle_index in [0, 2]:  # 顶部手柄
+                    scale_y = -scale_y
+                    
+        else:  # 边中点手柄
+            if handle_index in [1, 5]:  # 上中和下中
+                scale_x = 1.0
+                scale_y = current_vector.y() / start_vector.y() if start_vector.y() != 0 else 1.0
+                if handle_index == 1:  # 上中
+                    scale_y = -scale_y
+            else:  # 左中和右中
+                scale_x = current_vector.x() / start_vector.x() if start_vector.x() != 0 else 1.0
+                scale_y = 1.0
+                if handle_index in [7]:  # 左中
+                    scale_x = -scale_x
+                    
+        # 应用缩放
+        shape.scale_x *= scale_x
+        shape.scale_y *= scale_y
+        
+        # 计算新的中心点
+        new_rect = shape._get_global_bounds()
+        new_center = new_rect.center()
+        
+        # 调整位置以保持中心点不变
+        delta_x = new_center.x() - center.x()
+        delta_y = new_center.y() - center.y()
+        new_pos = QPointF(original_pos.x() - delta_x, original_pos.y() - delta_y)
+        shape.position = new_pos
+        
+        # 更新起始位置
+        self.drag_start = current_pos
+        
+    def _handle_rotate(self, current_pos):
+        """处理旋转操作"""
+        if not self.document.selected_shapes:
+            return
+            
+        shape = self.document.selected_shapes[0]
+        rect = shape._get_global_bounds()
+        center = rect.center()
+        
+        # 保存原始位置和旋转角度
+        original_pos = shape.position
+        original_rotation = shape.rotation
+        
+        # 计算旋转角度
+        start_angle = math.atan2(self.drag_start.y() - center.y(),
+                               self.drag_start.x() - center.x())
+        current_angle = math.atan2(current_pos.y() - center.y(),
+                                 current_pos.x() - center.x())
+        angle_delta = math.degrees(current_angle - start_angle)
+        
+        # 如果按住Shift键，将角度吸附到15度的倍数
+        if QApplication.keyboardModifiers() & Qt.ShiftModifier:
+            angle_delta = round(angle_delta / 15.0) * 15.0
+            
+        # 应用旋转
+        shape.rotation += angle_delta
+        
+        # 计算新的中心点
+        new_rect = shape._get_global_bounds()
+        new_center = new_rect.center()
+        
+        # 调整位置以保持中心点不变
+        delta_x = new_center.x() - center.x()
+        delta_y = new_center.y() - center.y()
+        new_pos = QPointF(original_pos.x() - delta_x, original_pos.y() - delta_y)
+        shape.position = new_pos
+        
+        # 更新起始位置
+        self.drag_start = current_pos
+        
+    def _calculate_angle(self, point):
+        """计算点相对于变换中心的角度"""
+        if not self.transform_center:
+            return 0
+            
+        dx = point.x() - self.transform_center.x()
+        dy = point.y() - self.transform_center.y()
+        return math.degrees(math.atan2(dy, dx))
+        
+    def _get_transform_center(self):
+        """获取变换中心点"""
+        if not self.document.selected_shapes:
+            return None
+            
+        shape = self.document.selected_shapes[0]
+        rect = shape._get_global_bounds()
+        return rect.center()
+        
+    def _save_shape_data(self):
+        """保存图形的原始数据"""
+        if not self.document.selected_shapes:
+            return None
+            
+        shape = self.document.selected_shapes[0]
+        return {
+            'position': QPointF(shape.position),
+            'rotation': shape.rotation,
+            'scale': shape.scale_x  # 假设scale_x和scale_y相等
+        }
+        
     def mouse_release(self, event):
         if event.button() == Qt.LeftButton:
-            # 如果没有移动，视为单击
-            if not self.moving and self.drag_shape:
-                # 单击已选中的图形时不做任何操作
-                pass
+            # 如果进行了变换操作，记录状态
+            if self.handle_type in ['scale', 'rotate'] and self.original_shape_data:
+                self.document.record_state()
+            elif self.moving:
+                self.document.record_state()
             
             # 重置状态
             self.drag_start = None
             self.drag_shape = None
             self.moving = False
             self.last_position = None
-            
-            # 如果有移动过图形，记录状态用于撤销/重做
-            if self.moving:
-                self.document.record_state()
+            self.handle_type = None
+            self.handle_index = -1
+            self.original_shape_data = None
+            self.transform_center = None
+            self.initial_angle = None
 
 
 class LineTool(DrawingTool):
@@ -681,3 +932,244 @@ class PanTool(DrawingTool):
             self.cursor = QCursor(Qt.OpenHandCursor)  # 恢复光标为开放手形
             if self.canvas:
                 self.canvas.setCursor(self.cursor) 
+
+
+class MandelbrotTool(DrawingTool):
+    """曼德勃罗集工具"""
+    def __init__(self, document):
+        super().__init__(document)
+        self.name = "曼德勃罗集"
+        self.cursor = QCursor(Qt.CrossCursor)
+        
+    def mouse_press(self, event):
+        if event.button() == Qt.LeftButton:
+            self.start_point = event.pos()
+            self.current_shape = MandelbrotSet(QRectF(self.start_point.x(), self.start_point.y(), 0, 0))
+            if self.color_tool:
+                self.apply_current_style(self.current_shape)
+            self.is_drawing = True
+        
+    def mouse_move(self, event):
+        if self.is_drawing:
+            pos = event.pos()
+            rect = QRectF(
+                min(self.start_point.x(), pos.x()),
+                min(self.start_point.y(), pos.y()),
+                abs(pos.x() - self.start_point.x()),
+                abs(pos.y() - self.start_point.y())
+            )
+            self.current_shape.rect = rect
+    
+    def mouse_release(self, event):
+        if event.button() == Qt.LeftButton and self.is_drawing:
+            self.is_drawing = False
+            if self.current_shape.rect.width() > 5 and self.current_shape.rect.height() > 5:
+                self.document.add_shape(self.current_shape)
+            self.current_shape = None
+
+
+class JuliaTool(DrawingTool):
+    """朱利亚集工具"""
+    def __init__(self, document):
+        super().__init__(document)
+        self.name = "朱利亚集"
+        self.cursor = QCursor(Qt.CrossCursor)
+        
+    def mouse_press(self, event):
+        if event.button() == Qt.LeftButton:
+            self.start_point = event.pos()
+            self.current_shape = JuliaSet(QRectF(self.start_point.x(), self.start_point.y(), 0, 0))
+            if self.color_tool:
+                self.apply_current_style(self.current_shape)
+            self.is_drawing = True
+        
+    def mouse_move(self, event):
+        if self.is_drawing:
+            pos = event.pos()
+            rect = QRectF(
+                min(self.start_point.x(), pos.x()),
+                min(self.start_point.y(), pos.y()),
+                abs(pos.x() - self.start_point.x()),
+                abs(pos.y() - self.start_point.y())
+            )
+            self.current_shape.rect = rect
+    
+    def mouse_release(self, event):
+        if event.button() == Qt.LeftButton and self.is_drawing:
+            self.is_drawing = False
+            if self.current_shape.rect.width() > 5 and self.current_shape.rect.height() > 5:
+                self.document.add_shape(self.current_shape)
+            self.current_shape = None
+
+
+class SuperEllipseTool(DrawingTool):
+    """超椭圆工具"""
+    def __init__(self, document):
+        super().__init__(document)
+        self.name = "超椭圆"
+        self.cursor = QCursor(Qt.CrossCursor)
+        
+    def mouse_press(self, event):
+        if event.button() == Qt.LeftButton:
+            self.start_point = event.pos()
+            self.current_shape = SuperEllipse(self.start_point)
+            if self.color_tool:
+                self.apply_current_style(self.current_shape)
+            self.is_drawing = True
+        
+    def mouse_move(self, event):
+        if self.is_drawing:
+            pos = event.pos()
+            dx = pos.x() - self.start_point.x()
+            dy = pos.y() - self.start_point.y()
+            self.current_shape.a = abs(dx)
+            self.current_shape.b = abs(dy)
+    
+    def mouse_release(self, event):
+        if event.button() == Qt.LeftButton and self.is_drawing:
+            self.is_drawing = False
+            if self.current_shape.a > 5 and self.current_shape.b > 5:
+                self.document.add_shape(self.current_shape)
+            self.current_shape = None
+
+
+class ParametricCurveTool(DrawingTool):
+    """参数曲线工具"""
+    def __init__(self, document, curve_type="rose"):
+        super().__init__(document)
+        self.curve_type = curve_type
+        self.name = {
+            "rose": "玫瑰线",
+            "heart": "心形线",
+            "butterfly": "蝴蝶线"
+        }[curve_type]
+        self.cursor = QCursor(Qt.CrossCursor)
+        
+    def mouse_press(self, event):
+        if event.button() == Qt.LeftButton:
+            self.start_point = event.pos()
+            self.current_shape = ParametricCurve(self.start_point, 0, self.curve_type)
+            if self.color_tool:
+                self.apply_current_style(self.current_shape)
+            self.is_drawing = True
+        
+    def mouse_move(self, event):
+        if self.is_drawing:
+            pos = event.pos()
+            dx = pos.x() - self.start_point.x()
+            dy = pos.y() - self.start_point.y()
+            radius = math.sqrt(dx*dx + dy*dy)
+            self.current_shape.radius = radius
+    
+    def mouse_release(self, event):
+        if event.button() == Qt.LeftButton and self.is_drawing:
+            self.is_drawing = False
+            if self.current_shape.radius > 5:
+                self.document.add_shape(self.current_shape)
+            self.current_shape = None
+
+
+class GearTool(DrawingTool):
+    """齿轮工具"""
+    def __init__(self, document):
+        super().__init__(document)
+        self.name = "齿轮"
+        self.cursor = QCursor(Qt.CrossCursor)
+        
+    def mouse_press(self, event):
+        if event.button() == Qt.LeftButton:
+            self.start_point = event.pos()
+            self.current_shape = Gear(self.start_point)
+            if self.color_tool:
+                self.apply_current_style(self.current_shape)
+            self.is_drawing = True
+        
+    def mouse_move(self, event):
+        if self.is_drawing:
+            # 根据鼠标位置调整齿轮大小
+            dx = event.pos().x() - self.start_point.x()
+            dy = event.pos().y() - self.start_point.y()
+            radius = math.sqrt(dx*dx + dy*dy)
+            
+            if radius > 5:
+                self.current_shape.outer_radius = radius
+                # 根据半径调整齿数和齿深
+                self.current_shape.tooth_count = max(8, min(40, int(radius / 10)))
+                self.current_shape.tooth_depth = radius * 0.15
+    
+    def mouse_release(self, event):
+        if event.button() == Qt.LeftButton and self.is_drawing:
+            self.is_drawing = False
+            if self.current_shape.outer_radius > 5:
+                self.document.add_shape(self.current_shape)
+            self.current_shape = None
+
+
+class LeafTool(DrawingTool):
+    """树叶工具"""
+    def __init__(self, document):
+        super().__init__(document)
+        self.name = "树叶"
+        self.cursor = QCursor(Qt.CrossCursor)
+        
+    def mouse_press(self, event):
+        if event.button() == Qt.LeftButton:
+            self.start_point = event.pos()
+            self.current_shape = Leaf(self.start_point)
+            if self.color_tool:
+                self.apply_current_style(self.current_shape)
+            self.is_drawing = True
+        
+    def mouse_move(self, event):
+        if self.is_drawing:
+            # 根据鼠标位置调整树叶大小和角度
+            dx = event.pos().x() - self.start_point.x()
+            dy = event.pos().y() - self.start_point.y()
+            size = math.sqrt(dx*dx + dy*dy)
+            angle = math.degrees(math.atan2(dy, dx))
+            
+            if size > 5:
+                self.current_shape.size = size
+                self.current_shape.angle = angle
+    
+    def mouse_release(self, event):
+        if event.button() == Qt.LeftButton and self.is_drawing:
+            self.is_drawing = False
+            if self.current_shape.size > 5:
+                self.document.add_shape(self.current_shape)
+            self.current_shape = None
+
+
+class CloudTool(DrawingTool):
+    """云朵工具"""
+    def __init__(self, document):
+        super().__init__(document)
+        self.name = "云朵"
+        self.cursor = QCursor(Qt.CrossCursor)
+        
+    def mouse_press(self, event):
+        if event.button() == Qt.LeftButton:
+            self.start_point = event.pos()
+            self.current_shape = Cloud(self.start_point)
+            if self.color_tool:
+                self.apply_current_style(self.current_shape)
+            self.is_drawing = True
+        
+    def mouse_move(self, event):
+        if self.is_drawing:
+            # 根据鼠标位置调整云朵大小
+            dx = event.pos().x() - self.start_point.x()
+            dy = event.pos().y() - self.start_point.y()
+            
+            if abs(dx) > 5:
+                self.current_shape.width = abs(dx)
+            
+            if abs(dy) > 5:
+                self.current_shape.height = abs(dy)
+    
+    def mouse_release(self, event):
+        if event.button() == Qt.LeftButton and self.is_drawing:
+            self.is_drawing = False
+            if self.current_shape.width > 5 and self.current_shape.height > 5:
+                self.document.add_shape(self.current_shape)
+            self.current_shape = None

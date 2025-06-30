@@ -29,8 +29,51 @@ class Shape:
             
         self.position = QPointF(0, 0)
         self.rotation = 0  # 旋转角度
-        self.scale_factor = 1.0  # 缩放因子
+        self.scale_x = 1.0  # X方向缩放因子
+        self.scale_y = 1.0  # Y方向缩放因子
         self.z_value = 0  # z顺序，用于图层排序
+        
+    def __getstate__(self):
+        """序列化时调用"""
+        state = self.__dict__.copy()
+        # 保存QPen的属性
+        state['pen_color'] = self.pen.color().rgba()
+        state['pen_width'] = self.pen.width()
+        state['pen_style'] = int(self.pen.style())
+        # 保存QBrush的属性
+        state['brush_color'] = self.brush.color().rgba()
+        state['brush_style'] = int(self.brush.style())
+        # 保存QPointF的属性
+        state['position_x'] = self.position.x()
+        state['position_y'] = self.position.y()
+        # 删除无法序列化的对象
+        del state['pen']
+        del state['brush']
+        del state['position']
+        return state
+        
+    def __setstate__(self, state):
+        """反序列化时调用"""
+        # 恢复QPen
+        pen_color = QColor()
+        pen_color.setRgba(state.pop('pen_color'))
+        pen_width = state.pop('pen_width')
+        pen_style = Qt.PenStyle(state.pop('pen_style'))
+        self.pen = QPen(pen_color, pen_width, pen_style)
+        
+        # 恢复QBrush
+        brush_color = QColor()
+        brush_color.setRgba(state.pop('brush_color'))
+        brush_style = Qt.BrushStyle(state.pop('brush_style'))
+        self.brush = QBrush(brush_color, brush_style)
+        
+        # 恢复QPointF
+        x = state.pop('position_x')
+        y = state.pop('position_y')
+        self.position = QPointF(x, y)
+        
+        # 恢复其他属性
+        self.__dict__.update(state)
         
     def set_pen(self, pen):
         self.pen = pen
@@ -47,7 +90,8 @@ class Shape:
         
     def scale(self, factor):
         """缩放图形"""
-        self.scale_factor *= factor
+        self.scale_x *= factor
+        self.scale_y *= factor
         
     def contains(self, point):
         """检查点是否在图形内，考虑变换"""
@@ -72,7 +116,7 @@ class Shape:
         # 反向应用变换（位置、旋转、缩放）
         transform.translate(self.position.x(), self.position.y())
         transform.rotate(self.rotation)
-        transform.scale(self.scale_factor, self.scale_factor)
+        transform.scale(self.scale_x, self.scale_y)
         # 计算逆变换
         inverted, success = transform.inverted()
         if not success:
@@ -93,7 +137,7 @@ class Shape:
         transform = QTransform()
         transform.translate(self.position.x(), self.position.y())
         transform.rotate(self.rotation)
-        transform.scale(self.scale_factor, self.scale_factor)
+        transform.scale(self.scale_x, self.scale_y)
         
         # 变换矩形的四个角点
         path = QPainterPath()
@@ -117,7 +161,7 @@ class Shape:
         # 应用变换
         painter.translate(self.position)
         painter.rotate(self.rotation)
-        painter.scale(self.scale_factor, self.scale_factor)
+        painter.scale(self.scale_x, self.scale_y)
         
         # 设置画笔和画刷
         painter.setPen(self.pen)
@@ -153,6 +197,31 @@ class Line(Shape):
         super().__init__(color, fill_color, line_width, line_style, layer)
         self.start_point = start
         self.end_point = end
+        
+    def __getstate__(self):
+        """序列化时调用"""
+        state = super().__getstate__()
+        # 保存QPointF的属性
+        state['start_x'] = self.start_point.x()
+        state['start_y'] = self.start_point.y()
+        state['end_x'] = self.end_point.x()
+        state['end_y'] = self.end_point.y()
+        # 删除无法序列化的对象
+        del state['start_point']
+        del state['end_point']
+        return state
+        
+    def __setstate__(self, state):
+        """反序列化时调用"""
+        # 恢复QPointF
+        start_x = state.pop('start_x')
+        start_y = state.pop('start_y')
+        end_x = state.pop('end_x')
+        end_y = state.pop('end_y')
+        self.start_point = QPointF(start_x, start_y)
+        self.end_point = QPointF(end_x, end_y)
+        # 恢复其他属性
+        super().__setstate__(state)
         
     def _draw(self, painter):
         painter.drawLine(self.start_point, self.end_point)
@@ -208,6 +277,29 @@ class Rectangle(Shape):
         super().__init__(color, fill_color, line_width, line_style, layer)
         self.rect = rect
         
+    def __getstate__(self):
+        """序列化时调用"""
+        state = super().__getstate__()
+        # 保存QRectF的属性
+        state['rect_x'] = self.rect.x()
+        state['rect_y'] = self.rect.y()
+        state['rect_width'] = self.rect.width()
+        state['rect_height'] = self.rect.height()
+        # 删除无法序列化的对象
+        del state['rect']
+        return state
+        
+    def __setstate__(self, state):
+        """反序列化时调用"""
+        # 恢复QRectF
+        x = state.pop('rect_x')
+        y = state.pop('rect_y')
+        width = state.pop('rect_width')
+        height = state.pop('rect_height')
+        self.rect = QRectF(x, y, width, height)
+        # 恢复其他属性
+        super().__setstate__(state)
+        
     def _draw(self, painter):
         painter.drawRect(self.rect)
         
@@ -222,7 +314,11 @@ class Rectangle(Shape):
     def clone(self):
         """创建矩形的副本"""
         rect_copy = Rectangle(QRectF(self.rect), self.color, self.fill_color, self.line_width, self.line_style, self.layer)
-        rect_copy.selected = False
+        rect_copy.position = QPointF(self.position)
+        rect_copy.rotation = self.rotation
+        rect_copy.scale_x = self.scale_x
+        rect_copy.scale_y = self.scale_y
+        rect_copy.z_value = self.z_value
         return rect_copy
 
 
@@ -233,6 +329,27 @@ class Circle(Shape):
         self.center = center
         self.radius = radius
         
+    def __getstate__(self):
+        """序列化时调用"""
+        state = super().__getstate__()
+        # 保存QPointF的属性
+        state['center_x'] = self.center.x()
+        state['center_y'] = self.center.y()
+        state['radius'] = self.radius
+        # 删除无法序列化的对象
+        del state['center']
+        return state
+        
+    def __setstate__(self, state):
+        """反序列化时调用"""
+        # 恢复QPointF和半径
+        center_x = state.pop('center_x')
+        center_y = state.pop('center_y')
+        self.center = QPointF(center_x, center_y)
+        self.radius = state.pop('radius')
+        # 恢复其他属性
+        super().__setstate__(state)
+        
     def _draw(self, painter):
         painter.drawEllipse(self.center, self.radius, self.radius)
         
@@ -240,32 +357,55 @@ class Circle(Shape):
         """检查点是否在圆内"""
         dx = point.x() - self.center.x()
         dy = point.y() - self.center.y()
-        return dx*dx + dy*dy <= self.radius*self.radius
+        return (dx * dx + dy * dy) <= (self.radius * self.radius)
         
     def bounding_rect(self):
         """获取圆的边界矩形"""
         return QRectF(
             self.center.x() - self.radius,
             self.center.y() - self.radius,
-            2 * self.radius,
-            2 * self.radius
+            self.radius * 2,
+            self.radius * 2
         )
         
     def clone(self):
-        """创建圆的副本"""
+        """创建圆形的副本"""
         circle_copy = Circle(QPointF(self.center), self.radius, self.color, self.fill_color, self.line_width, self.line_style, self.layer)
-        circle_copy.selected = False
+        circle_copy.position = QPointF(self.position)
+        circle_copy.rotation = self.rotation
+        circle_copy.scale_x = self.scale_x
+        circle_copy.scale_y = self.scale_y
+        circle_copy.z_value = self.z_value
         return circle_copy
 
 
 class ArchimedeanSpiral(Shape):
-    """阿基米德螺线"""
+    """阿基米德螺旋线"""
     def __init__(self, center=QPointF(0, 0), a=0.25, b=0.25, turns=3, color=None, fill_color=None, line_width=1, line_style=Qt.SolidLine, layer="默认图层"):
         super().__init__(color, fill_color, line_width, line_style, layer)
         self.center = center
-        self.a = a  # 螺线参数
-        self.b = b  # 螺线参数
-        self.turns = turns  # 螺线的圈数
+        self.a = a  # 螺旋线参数a
+        self.b = b  # 螺旋线参数b
+        self.turns = turns  # 螺旋线圈数
+        
+    def __getstate__(self):
+        """序列化时调用"""
+        state = super().__getstate__()
+        # 保存QPointF的属性
+        state['center_x'] = self.center.x()
+        state['center_y'] = self.center.y()
+        # 删除无法序列化的对象
+        del state['center']
+        return state
+        
+    def __setstate__(self, state):
+        """反序列化时调用"""
+        # 恢复QPointF
+        center_x = state.pop('center_x')
+        center_y = state.pop('center_y')
+        self.center = QPointF(center_x, center_y)
+        # 恢复其他属性
+        super().__setstate__(state)
         
     def _draw(self, painter):
         path = QPainterPath()
@@ -336,9 +476,13 @@ class ArchimedeanSpiral(Shape):
         )
         
     def clone(self):
-        """创建螺线的副本"""
+        """创建螺旋线的副本"""
         spiral_copy = ArchimedeanSpiral(QPointF(self.center), self.a, self.b, self.turns, self.color, self.fill_color, self.line_width, self.line_style, self.layer)
-        spiral_copy.selected = False
+        spiral_copy.position = QPointF(self.position)
+        spiral_copy.rotation = self.rotation
+        spiral_copy.scale_x = self.scale_x
+        spiral_copy.scale_y = self.scale_y
+        spiral_copy.z_value = self.z_value
         return spiral_copy
 
 
@@ -346,10 +490,29 @@ class SineCurve(Shape):
     """正弦曲线"""
     def __init__(self, start=QPointF(0, 0), amplitude=50, frequency=0.05, length=400, color=None, fill_color=None, line_width=1, line_style=Qt.SolidLine, layer="默认图层"):
         super().__init__(color, fill_color, line_width, line_style, layer)
-        self.start_point = start
+        self.start = start
         self.amplitude = amplitude
         self.frequency = frequency
         self.length = length
+        
+    def __getstate__(self):
+        """序列化时调用"""
+        state = super().__getstate__()
+        # 保存QPointF的属性
+        state['start_x'] = self.start.x()
+        state['start_y'] = self.start.y()
+        # 删除无法序列化的对象
+        del state['start']
+        return state
+        
+    def __setstate__(self, state):
+        """反序列化时调用"""
+        # 恢复QPointF
+        start_x = state.pop('start_x')
+        start_y = state.pop('start_y')
+        self.start = QPointF(start_x, start_y)
+        # 恢复其他属性
+        super().__setstate__(state)
         
     def _draw(self, painter):
         path = QPainterPath()
@@ -363,10 +526,10 @@ class SineCurve(Shape):
             y = self.amplitude * math.sin(x * self.frequency)
             
             if first_point:
-                path.moveTo(x + self.start_point.x(), y + self.start_point.y())
+                path.moveTo(x + self.start.x(), y + self.start.y())
                 first_point = False
             else:
-                path.lineTo(x + self.start_point.x(), y + self.start_point.y())
+                path.lineTo(x + self.start.x(), y + self.start.y())
         
         # 使用抗锯齿绘制
         painter.setRenderHint(QPainter.Antialiasing, True)
@@ -375,12 +538,12 @@ class SineCurve(Shape):
     def _contains_local(self, point):
         """检查点是否在正弦曲线上或附近"""
         # 检查点是否在曲线的横向范围内
-        if point.x() < self.start_point.x() or point.x() > self.start_point.x() + self.length:
+        if point.x() < self.start.x() or point.x() > self.start.x() + self.length:
             return False
             
         # 计算在x位置的正弦值
-        x_local = point.x() - self.start_point.x()
-        expected_y = self.amplitude * math.sin(x_local * self.frequency) + self.start_point.y()
+        x_local = point.x() - self.start.x()
+        expected_y = self.amplitude * math.sin(x_local * self.frequency) + self.start.y()
         
         # 检查点是否在曲线附近
         tolerance = 5.0  # 点击容差
@@ -389,24 +552,47 @@ class SineCurve(Shape):
     def bounding_rect(self):
         """获取正弦曲线的边界矩形"""
         return QRectF(
-            self.start_point.x(),
-            self.start_point.y() - self.amplitude,
+            self.start.x(),
+            self.start.y() - self.amplitude,
             self.length,
             2 * self.amplitude
         )
         
     def clone(self):
         """创建正弦曲线的副本"""
-        curve_copy = SineCurve(QPointF(self.start_point), self.amplitude, self.frequency, self.length, self.color, self.fill_color, self.line_width, self.line_style, self.layer)
-        curve_copy.selected = False
-        return curve_copy
+        sine_copy = SineCurve(QPointF(self.start), self.amplitude, self.frequency, self.length, self.color, self.fill_color, self.line_width, self.line_style, self.layer)
+        sine_copy.position = QPointF(self.position)
+        sine_copy.rotation = self.rotation
+        sine_copy.scale_x = self.scale_x
+        sine_copy.scale_y = self.scale_y
+        sine_copy.z_value = self.z_value
+        return sine_copy
 
 
 class Freehand(Shape):
     """自由绘制"""
     def __init__(self, color=None, fill_color=None, line_width=1, line_style=Qt.SolidLine, layer="默认图层"):
         super().__init__(color, fill_color, line_width, line_style, layer)
-        self.points = []  # 点列表
+        self.points = []
+        
+    def __getstate__(self):
+        """序列化时调用"""
+        state = super().__getstate__()
+        # 保存QPointF列表的属性
+        state['points_x'] = [p.x() for p in self.points]
+        state['points_y'] = [p.y() for p in self.points]
+        # 删除无法序列化的对象
+        del state['points']
+        return state
+        
+    def __setstate__(self, state):
+        """反序列化时调用"""
+        # 恢复QPointF列表
+        points_x = state.pop('points_x')
+        points_y = state.pop('points_y')
+        self.points = [QPointF(x, y) for x, y in zip(points_x, points_y)]
+        # 恢复其他属性
+        super().__setstate__(state)
         
     def add_point(self, point):
         self.points.append(point)
@@ -478,19 +664,33 @@ class Freehand(Shape):
         return QRectF(min_x, min_y, max_x - min_x, max_y - min_y)
         
     def clone(self):
-        """创建自由绘制线条的副本"""
+        """创建自由绘制的副本"""
         freehand_copy = Freehand(self.color, self.fill_color, self.line_width, self.line_style, self.layer)
-        for point in self.points:
-            freehand_copy.add_point(QPointF(point))
-        freehand_copy.selected = False
+        freehand_copy.points = [QPointF(p) for p in self.points]
+        freehand_copy.position = QPointF(self.position)
+        freehand_copy.rotation = self.rotation
+        freehand_copy.scale_x = self.scale_x
+        freehand_copy.scale_y = self.scale_y
+        freehand_copy.z_value = self.z_value
         return freehand_copy
 
 
 class ShapeGroup(Shape):
-    """图形组合"""
+    """图形组"""
     def __init__(self, color=None, fill_color=None, line_width=1, line_style=Qt.SolidLine, layer="默认图层"):
         super().__init__(color, fill_color, line_width, line_style, layer)
-        self.shapes = []  # 子图形列表
+        self.shapes = []
+        
+    def __getstate__(self):
+        """序列化时调用"""
+        state = super().__getstate__()
+        # shapes列表中的每个图形都会自动调用其__getstate__方法
+        return state
+        
+    def __setstate__(self, state):
+        """反序列化时调用"""
+        super().__setstate__(state)
+        # shapes列表中的每个图形都会自动调用其__setstate__方法
         
     def add(self, shape):
         self.shapes.append(shape)
@@ -526,9 +726,449 @@ class ShapeGroup(Shape):
         return QRectF(min_x, min_y, max_x - min_x, max_y - min_y)
         
     def clone(self):
-        """创建组合图形的副本"""
+        """创建图形组的副本"""
         group_copy = ShapeGroup(self.color, self.fill_color, self.line_width, self.line_style, self.layer)
         for shape in self.shapes:
             group_copy.add(shape.clone())
         group_copy.selected = False
-        return group_copy 
+        return group_copy
+
+
+class MandelbrotSet(Shape):
+    """曼德勃罗集"""
+    def __init__(self, rect=QRectF(-2, -1.5, 3, 3), max_iter=100, color=None, fill_color=None, line_width=1, line_style=Qt.SolidLine, layer="默认图层"):
+        super().__init__(color, fill_color, line_width, line_style, layer)
+        self.rect = rect  # 复平面上的显示区域
+        self.max_iter = max_iter  # 最大迭代次数
+        
+    def _draw(self, painter):
+        width = int(self.rect.width() * 100)  # 分辨率
+        height = int(self.rect.height() * 100)
+        
+        # 创建图像
+        for px in range(width):
+            for py in range(height):
+                # 将像素坐标映射到复平面
+                x = self.rect.x() + px * self.rect.width() / width
+                y = self.rect.y() + py * self.rect.height() / height
+                c = complex(x, y)
+                
+                # 计算该点是否属于曼德勃罗集
+                z = complex(0, 0)
+                for i in range(self.max_iter):
+                    z = z * z + c
+                    if abs(z) > 2:
+                        break
+                
+                # 根据迭代次数设置颜色
+                if i == self.max_iter - 1:
+                    color = self.color
+                else:
+                    # 创建渐变色
+                    hue = (i % 360) / 360.0
+                    color = QColor.fromHsvF(hue, 1.0, 1.0)
+                
+                painter.setPen(color)
+                painter.drawPoint(px, py)
+        
+    def _contains_local(self, point):
+        """检查点是否在分形图形显示区域内"""
+        return self.rect.contains(point)
+        
+    def bounding_rect(self):
+        """获取分形图形的边界矩形"""
+        return self.rect
+        
+    def clone(self):
+        """创建分形图形的副本"""
+        fractal_copy = MandelbrotSet(QRectF(self.rect), self.max_iter, self.color, self.fill_color, self.line_width, self.line_style, self.layer)
+        fractal_copy.selected = False
+        return fractal_copy
+
+
+class JuliaSet(Shape):
+    """朱利亚集"""
+    def __init__(self, rect=QRectF(-1.5, -1.5, 3, 3), c=complex(-0.4, 0.6), max_iter=100, color=None, fill_color=None, line_width=1, line_style=Qt.SolidLine, layer="默认图层"):
+        super().__init__(color, fill_color, line_width, line_style, layer)
+        self.rect = rect  # 复平面上的显示区域
+        self.c = c  # Julia集的参数
+        self.max_iter = max_iter  # 最大迭代次数
+        
+    def _draw(self, painter):
+        width = int(self.rect.width() * 100)  # 分辨率
+        height = int(self.rect.height() * 100)
+        
+        # 创建图像
+        for px in range(width):
+            for py in range(height):
+                # 将像素坐标映射到复平面
+                x = self.rect.x() + px * self.rect.width() / width
+                y = self.rect.y() + py * self.rect.height() / height
+                z = complex(x, y)
+                
+                # 计算该点是否属于朱利亚集
+                for i in range(self.max_iter):
+                    z = z * z + self.c
+                    if abs(z) > 2:
+                        break
+                
+                # 根据迭代次数设置颜色
+                if i == self.max_iter - 1:
+                    color = self.color
+                else:
+                    # 创建渐变色
+                    hue = (i % 360) / 360.0
+                    color = QColor.fromHsvF(hue, 1.0, 1.0)
+                
+                painter.setPen(color)
+                painter.drawPoint(px, py)
+        
+    def _contains_local(self, point):
+        """检查点是否在分形图形显示区域内"""
+        return self.rect.contains(point)
+        
+    def bounding_rect(self):
+        """获取分形图形的边界矩形"""
+        return self.rect
+        
+    def clone(self):
+        """创建分形图形的副本"""
+        julia_copy = JuliaSet(QRectF(self.rect), self.c, self.max_iter, self.color, self.fill_color, self.line_width, self.line_style, self.layer)
+        julia_copy.selected = False
+        return julia_copy
+
+
+class SuperEllipse(Shape):
+    """超椭圆（拉梅曲线）"""
+    def __init__(self, center=QPointF(0, 0), a=100, b=100, n=2.5, color=None, fill_color=None, line_width=1, line_style=Qt.SolidLine, layer="默认图层"):
+        super().__init__(color, fill_color, line_width, line_style, layer)
+        self.center = center  # 中心点
+        self.a = a  # x轴半径
+        self.b = b  # y轴半径
+        self.n = n  # 拉梅参数
+        
+    def _draw(self, painter):
+        path = QPainterPath()
+        
+        # 生成超椭圆的点
+        points = []
+        steps = 200
+        for i in range(steps + 1):
+            t = 2 * math.pi * i / steps
+            # 超椭圆参数方程
+            cos_t = math.cos(t)
+            sin_t = math.sin(t)
+            x = self.a * math.copysign(abs(cos_t) ** (2/self.n), cos_t)
+            y = self.b * math.copysign(abs(sin_t) ** (2/self.n), sin_t)
+            points.append(QPointF(x + self.center.x(), y + self.center.y()))
+        
+        # 绘制路径
+        if points:
+            path.moveTo(points[0])
+            for point in points[1:]:
+                path.lineTo(point)
+            path.closeSubpath()
+            
+        painter.drawPath(path)
+        
+    def _contains_local(self, point):
+        """检查点是否在超椭圆内"""
+        # 将点转换到以中心为原点的坐标系
+        x = (point.x() - self.center.x()) / self.a
+        y = (point.y() - self.center.y()) / self.b
+        # 超椭圆方程
+        return abs(x) ** self.n + abs(y) ** self.n <= 1
+        
+    def bounding_rect(self):
+        """获取超椭圆的边界矩形"""
+        return QRectF(
+            self.center.x() - self.a,
+            self.center.y() - self.b,
+            2 * self.a,
+            2 * self.b
+        )
+        
+    def clone(self):
+        """创建超椭圆的副本"""
+        ellipse_copy = SuperEllipse(QPointF(self.center), self.a, self.b, self.n, self.color, self.fill_color, self.line_width, self.line_style, self.layer)
+        ellipse_copy.selected = False
+        return ellipse_copy
+
+
+class ParametricCurve(Shape):
+    """参数化曲线（玫瑰线、心形线等）"""
+    def __init__(self, center=QPointF(0, 0), radius=100, curve_type="rose", n=2, color=None, fill_color=None, line_width=1, line_style=Qt.SolidLine, layer="默认图层"):
+        super().__init__(color, fill_color, line_width, line_style, layer)
+        self.center = center  # 中心点
+        self.radius = radius  # 基础半径
+        self.curve_type = curve_type  # 曲线类型
+        self.n = n  # 参数（玫瑰线的瓣数等）
+        
+    def _draw(self, painter):
+        path = QPainterPath()
+        
+        # 生成参数曲线的点
+        points = []
+        steps = 500
+        
+        if self.curve_type == "rose":
+            # 玫瑰线
+            for i in range(steps + 1):
+                t = 2 * math.pi * i / steps
+                r = self.radius * math.cos(self.n * t)
+                x = r * math.cos(t)
+                y = r * math.sin(t)
+                points.append(QPointF(x + self.center.x(), y + self.center.y()))
+                
+        elif self.curve_type == "heart":
+            # 心形线
+            for i in range(steps + 1):
+                t = 2 * math.pi * i / steps
+                x = self.radius * math.sin(t) ** 3
+                y = self.radius * (1.3 * math.cos(t) - 0.5 * math.cos(2*t) - 0.2 * math.cos(3*t) - 0.1 * math.cos(4*t))
+                points.append(QPointF(x + self.center.x(), -y + self.center.y()))
+                
+        elif self.curve_type == "butterfly":
+            # 蝴蝶线
+            for i in range(steps + 1):
+                t = 2 * math.pi * i / steps
+                r = math.exp(math.cos(t)) - 2 * math.cos(4*t) - math.sin(t/12) ** 5
+                x = self.radius * math.sin(t) * r
+                y = self.radius * math.cos(t) * r
+                points.append(QPointF(x + self.center.x(), y + self.center.y()))
+        
+        # 绘制路径
+        if points:
+            path.moveTo(points[0])
+            for point in points[1:]:
+                path.lineTo(point)
+            if self.curve_type != "butterfly":  # 蝴蝶线不闭合
+                path.closeSubpath()
+            
+        painter.drawPath(path)
+        
+    def _contains_local(self, point):
+        """检查点是否在曲线附近"""
+        # 简化为检查点是否在外接圆内
+        dx = point.x() - self.center.x()
+        dy = point.y() - self.center.y()
+        return dx*dx + dy*dy <= self.radius*self.radius
+        
+    def bounding_rect(self):
+        """获取曲线的边界矩形"""
+        # 根据不同曲线类型返回不同的边界
+        if self.curve_type == "heart":
+            return QRectF(
+                self.center.x() - self.radius,
+                self.center.y() - self.radius,
+                2 * self.radius,
+                2 * self.radius
+            )
+        else:
+            return QRectF(
+                self.center.x() - self.radius,
+                self.center.y() - self.radius,
+                2 * self.radius,
+                2 * self.radius
+            )
+        
+    def clone(self):
+        """创建参数曲线的副本"""
+        curve_copy = ParametricCurve(QPointF(self.center), self.radius, self.curve_type, self.n, self.color, self.fill_color, self.line_width, self.line_style, self.layer)
+        curve_copy.selected = False
+        return curve_copy
+
+
+class Gear(Shape):
+    """齿轮"""
+    def __init__(self, center=QPointF(0, 0), outer_radius=100, tooth_count=20, tooth_depth=10, color=None, fill_color=None, line_width=1, line_style=Qt.SolidLine, layer="默认图层"):
+        super().__init__(color, fill_color, line_width, line_style, layer)
+        self.center = center
+        self.outer_radius = outer_radius
+        self.tooth_count = tooth_count
+        self.tooth_depth = tooth_depth
+        
+    def _draw(self, painter):
+        path = QPainterPath()
+        
+        # 绘制齿轮轮廓
+        angle_step = 2 * math.pi / (self.tooth_count * 2)  # 每个齿的角步长
+        inner_radius = self.outer_radius - self.tooth_depth
+        
+        # 生成齿轮的点
+        first_point = True
+        for i in range(self.tooth_count * 2):
+            angle = i * angle_step
+            # 交替使用外半径和内半径
+            radius = self.outer_radius if i % 2 == 0 else inner_radius
+            x = self.center.x() + radius * math.cos(angle)
+            y = self.center.y() + radius * math.sin(angle)
+            
+            if first_point:
+                path.moveTo(x, y)
+                first_point = False
+            else:
+                path.lineTo(x, y)
+        
+        path.closeSubpath()
+        
+        # 绘制中心圆
+        center_radius = self.outer_radius * 0.2
+        path.addEllipse(self.center, center_radius, center_radius)
+        
+        painter.drawPath(path)
+        
+    def _contains_local(self, point):
+        dx = point.x() - self.center.x()
+        dy = point.y() - self.center.y()
+        return dx*dx + dy*dy <= self.outer_radius*self.outer_radius
+        
+    def bounding_rect(self):
+        return QRectF(
+            self.center.x() - self.outer_radius,
+            self.center.y() - self.outer_radius,
+            2 * self.outer_radius,
+            2 * self.outer_radius
+        )
+        
+    def clone(self):
+        gear_copy = Gear(QPointF(self.center), self.outer_radius, self.tooth_count, self.tooth_depth, self.color, self.fill_color, self.line_width, self.line_style, self.layer)
+        gear_copy.selected = False
+        return gear_copy
+
+
+class Leaf(Shape):
+    """树叶"""
+    def __init__(self, center=QPointF(0, 0), size=100, angle=0, color=None, fill_color=None, line_width=1, line_style=Qt.SolidLine, layer="默认图层"):
+        super().__init__(color, fill_color, line_width, line_style, layer)
+        self.center = center
+        self.size = size
+        self.angle = angle  # 旋转角度
+        
+    def _draw(self, painter):
+        path = QPainterPath()
+        
+        # 保存当前变换
+        painter.save()
+        
+        # 移动到中心点并旋转
+        painter.translate(self.center)
+        painter.rotate(self.angle)
+        
+        # 绘制叶片主体
+        path.moveTo(0, -self.size/2)
+        path.cubicTo(
+            self.size/3, -self.size/2,  # 控制点1
+            self.size/2, -self.size/6,  # 控制点2
+            0, self.size/2  # 终点
+        )
+        path.cubicTo(
+            -self.size/2, -self.size/6,  # 控制点1
+            -self.size/3, -self.size/2,  # 控制点2
+            0, -self.size/2  # 终点
+        )
+        
+        # 绘制叶脉
+        main_vein = QPainterPath()
+        main_vein.moveTo(0, -self.size/2)
+        main_vein.lineTo(0, self.size/2)
+        
+        # 绘制侧脉
+        side_veins = QPainterPath()
+        for i in range(5):
+            y = -self.size/3 + i * self.size/3
+            side_veins.moveTo(0, y)
+            side_veins.quadTo(self.size/4, y + self.size/10, self.size/3, y + self.size/8)
+            side_veins.moveTo(0, y)
+            side_veins.quadTo(-self.size/4, y + self.size/10, -self.size/3, y + self.size/8)
+        
+        # 填充叶片
+        if self.fill_color:
+            painter.fillPath(path, QBrush(self.fill_color))
+        
+        # 绘制轮廓和叶脉
+        painter.drawPath(path)
+        painter.drawPath(main_vein)
+        painter.drawPath(side_veins)
+        
+        # 恢复变换
+        painter.restore()
+        
+    def _contains_local(self, point):
+        # 转换点到叶片坐标系
+        dx = point.x() - self.center.x()
+        dy = point.y() - self.center.y()
+        # 简化为椭圆检测
+        return (dx*dx)/(self.size*self.size/4) + (dy*dy)/(self.size*self.size) <= 1
+        
+    def bounding_rect(self):
+        return QRectF(
+            self.center.x() - self.size/2,
+            self.center.y() - self.size/2,
+            self.size,
+            self.size
+        )
+        
+    def clone(self):
+        leaf_copy = Leaf(QPointF(self.center), self.size, self.angle, self.color, self.fill_color, self.line_width, self.line_style, self.layer)
+        leaf_copy.selected = False
+        return leaf_copy
+
+
+class Cloud(Shape):
+    """云朵"""
+    def __init__(self, center=QPointF(0, 0), width=200, height=100, color=None, fill_color=None, line_width=1, line_style=Qt.SolidLine, layer="默认图层"):
+        super().__init__(color, fill_color, line_width, line_style, layer)
+        self.center = center
+        self.width = width
+        self.height = height
+        
+    def _draw(self, painter):
+        path = QPainterPath()
+        
+        # 定义云朵的圆形组件
+        circles = [
+            (0, 0, self.height * 0.8),  # 中心圆
+            (-self.width * 0.3, 0, self.height * 0.7),  # 左圆
+            (self.width * 0.3, 0, self.height * 0.7),  # 右圆
+            (-self.width * 0.15, -self.height * 0.2, self.height * 0.6),  # 左上圆
+            (self.width * 0.15, -self.height * 0.2, self.height * 0.6),  # 右上圆
+        ]
+        
+        # 绘制每个圆形
+        first = True
+        for x, y, r in circles:
+            center = QPointF(self.center.x() + x, self.center.y() + y)
+            if first:
+                path.addEllipse(center, r, r)
+                first = False
+            else:
+                sub_path = QPainterPath()
+                sub_path.addEllipse(center, r, r)
+                path = path.united(sub_path)
+        
+        # 填充云朵
+        if self.fill_color:
+            painter.fillPath(path, QBrush(self.fill_color))
+        
+        # 绘制轮廓
+        painter.drawPath(path)
+        
+    def _contains_local(self, point):
+        dx = point.x() - self.center.x()
+        dy = point.y() - self.center.y()
+        # 简化为椭圆检测
+        return (dx*dx)/(self.width*self.width/4) + (dy*dy)/(self.height*self.height/4) <= 1
+        
+    def bounding_rect(self):
+        return QRectF(
+            self.center.x() - self.width/2,
+            self.center.y() - self.height/2,
+            self.width,
+            self.height
+        )
+        
+    def clone(self):
+        cloud_copy = Cloud(QPointF(self.center), self.width, self.height, self.color, self.fill_color, self.line_width, self.line_style, self.layer)
+        cloud_copy.selected = False
+        return cloud_copy 

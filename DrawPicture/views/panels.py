@@ -4,8 +4,8 @@
 import os
 from PyQt5.QtWidgets import (
     QWidget, QVBoxLayout, QHBoxLayout, QPushButton, QLabel, 
-                            QColorDialog, QSlider, QComboBox, QGroupBox, QListWidget,
-                            QListWidgetItem, QSpinBox, QCheckBox, QToolButton, QMenu,
+    QColorDialog, QSlider, QComboBox, QGroupBox, QListWidget,
+    QListWidgetItem, QSpinBox, QCheckBox, QToolButton, QMenu,
     QAction, QInputDialog, QGridLayout, QFormLayout, QMessageBox,
     QLineEdit, QAbstractItemView, QScrollArea, QSizePolicy, QFrame,
     QTabWidget, QRadioButton, QButtonGroup
@@ -14,9 +14,9 @@ from PyQt5.QtGui import (
     QIcon, QColor, QPainter, QPixmap, QPen, QBrush, QPalette,
     QLinearGradient, QRadialGradient, QGradient
 )
-from PyQt5.QtCore import Qt, QSize, pyqtSignal, QTimer
+from PyQt5.QtCore import Qt, QSize, pyqtSignal, QTimer, QPointF, QRectF
 
-from DrawPicture.models.document import DrawingDocument
+from DrawPicture.models.document import Document
 from DrawPicture.models.tools import ToolType
 
 class ToolPanel(QWidget):
@@ -52,6 +52,57 @@ class ToolPanel(QWidget):
         self.sine_btn = self._create_tool_button("正弦曲线", "sine", "~")
         self.eraser_btn = self._create_tool_button("橡皮擦", "eraser", "☒")
         
+        # 创建高级图形菜单按钮
+        self.advanced_btn = QPushButton("高级图形")
+        self.advanced_btn.setFixedHeight(36)
+        self.advanced_menu = QMenu(self)
+        
+        # 创建子菜单
+        self.superellipse_menu = QMenu("超椭圆", self)
+        self.parametric_menu = QMenu("参数曲线", self)
+        self.engineering_menu = QMenu("工程图形", self)
+        self.nature_menu = QMenu("自然形态", self)
+        
+        # 添加超椭圆动作
+        self.superellipse_action = QAction("超椭圆", self)
+        self.superellipse_menu.addAction(self.superellipse_action)
+        
+        # 添加参数曲线动作
+        self.rose_action = QAction("玫瑰线", self)
+        self.heart_action = QAction("心形线", self)
+        self.butterfly_action = QAction("蝴蝶线", self)
+        self.parametric_menu.addAction(self.rose_action)
+        self.parametric_menu.addAction(self.heart_action)
+        self.parametric_menu.addAction(self.butterfly_action)
+        
+        # 添加工程图形动作
+        self.gear_action = QAction("齿轮", self)
+        self.engineering_menu.addAction(self.gear_action)
+        
+        # 添加自然形态动作
+        self.leaf_action = QAction("树叶", self)
+        self.cloud_action = QAction("云朵", self)
+        self.nature_menu.addAction(self.leaf_action)
+        self.nature_menu.addAction(self.cloud_action)
+        
+        # 将子菜单添加到高级图形菜单
+        self.advanced_menu.addMenu(self.superellipse_menu)
+        self.advanced_menu.addMenu(self.parametric_menu)
+        self.advanced_menu.addMenu(self.engineering_menu)
+        self.advanced_menu.addMenu(self.nature_menu)
+        
+        # 设置高级图形按钮的菜单
+        self.advanced_btn.setMenu(self.advanced_menu)
+        
+        # 连接所有动作的信号
+        self.superellipse_action.triggered.connect(lambda: self._on_tool_clicked("superellipse"))
+        self.rose_action.triggered.connect(lambda: self._on_tool_clicked("parametric_rose"))
+        self.heart_action.triggered.connect(lambda: self._on_tool_clicked("parametric_heart"))
+        self.butterfly_action.triggered.connect(lambda: self._on_tool_clicked("parametric_butterfly"))
+        self.gear_action.triggered.connect(lambda: self._on_tool_clicked("gear"))
+        self.leaf_action.triggered.connect(lambda: self._on_tool_clicked("leaf"))
+        self.cloud_action.triggered.connect(lambda: self._on_tool_clicked("cloud"))
+        
         # 将按钮添加到布局
         tools_layout.addWidget(self.selection_btn)
         tools_layout.addWidget(self.pan_btn)
@@ -62,6 +113,16 @@ class ToolPanel(QWidget):
         tools_layout.addWidget(self.spiral_btn)
         tools_layout.addWidget(self.sine_btn)
         tools_layout.addWidget(self.eraser_btn)
+        
+        # 添加分隔线
+        separator = QFrame()
+        separator.setFrameShape(QFrame.HLine)
+        separator.setFrameShadow(QFrame.Sunken)
+        tools_layout.addWidget(separator)
+        
+        # 添加高级图形菜单按钮
+        tools_layout.addWidget(self.advanced_btn)
+        
         tools_layout.addStretch(1)
         
         tools_group.setLayout(tools_layout)
@@ -114,7 +175,7 @@ class ToolPanel(QWidget):
         # 清除所有按钮的选中状态
         for btn in [self.selection_btn, self.pan_btn, self.line_btn, self.rectangle_btn, 
                   self.circle_btn, self.freehand_btn, self.spiral_btn, self.sine_btn,
-                  self.eraser_btn]:  # 包含所有工具按钮
+                  self.eraser_btn]:
             btn.setChecked(False)
             
         # 设置当前工具
@@ -138,7 +199,8 @@ class ToolPanel(QWidget):
         elif tool_name == "sine":
             self.sine_btn.setChecked(True)
         elif tool_name == "eraser":
-            self.eraser_btn.setChecked(True)  # 设置橡皮擦按钮选中状态
+            self.eraser_btn.setChecked(True)
+        # 高级图形工具不需要设置选中状态，因为它们是菜单项
             
         # 发送信号
         self.tool_selected.emit(tool_name)
@@ -721,7 +783,7 @@ class LayerPanel(QWidget):
     # 定义信号
     layer_changed = pyqtSignal(str)
     
-    def __init__(self, document: DrawingDocument):
+    def __init__(self, document: Document):
         super().__init__()
         
         self.document = document
@@ -1228,3 +1290,266 @@ class LayerPanel(QWidget):
             
         if parent and hasattr(parent, 'set_status_message'):
             parent.set_status_message(message)
+
+
+class ShapeLibraryPanel(QWidget):
+    """图形库面板"""
+    
+    shape_selected = pyqtSignal(str, dict)  # 图形选择信号，参数：图形类型，参数字典
+    
+    def __init__(self, document, parent=None):
+        super().__init__(parent)
+        self.document = document
+        self.init_ui()
+        
+    def init_ui(self):
+        """初始化UI"""
+        layout = QVBoxLayout(self)
+        layout.setSpacing(10)
+        layout.setContentsMargins(10, 10, 10, 10)
+        
+        # 创建图形库组
+        library_group = QGroupBox("图形库")
+        library_group.setMinimumWidth(150)
+        library_layout = QVBoxLayout()
+        library_layout.setSpacing(8)
+        library_layout.setContentsMargins(10, 15, 10, 10)
+        
+        # 创建图形类别
+        self.create_basic_shapes_section(library_layout)
+        self.add_separator(library_layout)
+        self.create_curve_shapes_section(library_layout)
+        self.add_separator(library_layout)
+        self.create_special_shapes_section(library_layout)
+        
+        library_layout.addStretch(1)
+        library_group.setLayout(library_layout)
+        
+        # 将图形库组添加到主布局
+        layout.addWidget(library_group)
+        layout.addStretch(1)
+        
+    def add_separator(self, layout):
+        """添加分隔符"""
+        separator = QFrame()
+        separator.setFrameShape(QFrame.HLine)
+        separator.setFrameShadow(QFrame.Sunken)
+        separator.setStyleSheet("background-color: #c0c0c0;")
+        layout.addWidget(separator)
+        
+    def create_basic_shapes_section(self, parent_layout):
+        """创建基础图形区域"""
+        # 基础图形标签
+        basic_label = QLabel("基础图形")
+        basic_label.setStyleSheet("font-weight: bold; color: #333;")
+        parent_layout.addWidget(basic_label)
+        
+        # 基础图形按钮
+        basic_layout = QGridLayout()
+        basic_layout.setSpacing(5)
+        
+        # 直线
+        line_btn = self._create_shape_button("直线", "line", "╱", {
+            'start': (0, 0),
+            'end': (100, 100)
+        })
+        basic_layout.addWidget(line_btn, 0, 0)
+        
+        # 矩形
+        rect_btn = self._create_shape_button("矩形", "rectangle", "□", {
+            'rect': (0, 0, 100, 80)
+        })
+        basic_layout.addWidget(rect_btn, 0, 1)
+        
+        # 圆形
+        circle_btn = self._create_shape_button("圆形", "circle", "○", {
+            'center': (50, 50),
+            'radius': 50
+        })
+        basic_layout.addWidget(circle_btn, 1, 0)
+        
+        # 正方形
+        square_btn = self._create_shape_button("正方形", "square", "■", {
+            'rect': (0, 0, 80, 80)
+        })
+        basic_layout.addWidget(square_btn, 1, 1)
+        
+        parent_layout.addLayout(basic_layout)
+        
+    def create_curve_shapes_section(self, parent_layout):
+        """创建曲线图形区域"""
+        # 曲线图形标签
+        curve_label = QLabel("曲线图形")
+        curve_label.setStyleSheet("font-weight: bold; color: #333;")
+        parent_layout.addWidget(curve_label)
+        
+        # 曲线图形按钮
+        curve_layout = QGridLayout()
+        curve_layout.setSpacing(5)
+        
+        # 螺旋线
+        spiral_btn = self._create_shape_button("螺旋线", "spiral", "@", {
+            'center': (50, 50),
+            'a': 0.25,
+            'b': 0.25,
+            'turns': 3
+        })
+        curve_layout.addWidget(spiral_btn, 0, 0)
+        
+        # 正弦曲线
+        sine_btn = self._create_shape_button("正弦曲线", "sine", "~", {
+            'start': (0, 50),
+            'amplitude': 50,
+            'frequency': 0.05,
+            'length': 400
+        })
+        curve_layout.addWidget(sine_btn, 0, 1)
+        
+        # 余弦曲线
+        cosine_btn = self._create_shape_button("余弦曲线", "cosine", "∽", {
+            'start': (0, 50),
+            'amplitude': 50,
+            'frequency': 0.05,
+            'length': 400,
+            'phase': 90
+        })
+        curve_layout.addWidget(cosine_btn, 1, 0)
+        
+        # 椭圆
+        ellipse_btn = self._create_shape_button("椭圆", "ellipse", "⬭", {
+            'center': (50, 50),
+            'radius_x': 60,
+            'radius_y': 40
+        })
+        curve_layout.addWidget(ellipse_btn, 1, 1)
+        
+        parent_layout.addLayout(curve_layout)
+        
+    def create_special_shapes_section(self, parent_layout):
+        """创建特殊图形区域"""
+        # 特殊图形标签
+        special_label = QLabel("特殊图形")
+        special_label.setStyleSheet("font-weight: bold; color: #333;")
+        parent_layout.addWidget(special_label)
+        
+        # 特殊图形按钮
+        special_layout = QGridLayout()
+        special_layout.setSpacing(5)
+        
+        # 三角形
+        triangle_btn = self._create_shape_button("三角形", "triangle", "△", {
+            'points': [(25, 75), (75, 75), (50, 25)]
+        })
+        special_layout.addWidget(triangle_btn, 0, 0)
+        
+        # 菱形
+        diamond_btn = self._create_shape_button("菱形", "diamond", "◇", {
+            'center': (50, 50),
+            'width': 60,
+            'height': 40
+        })
+        special_layout.addWidget(diamond_btn, 0, 1)
+        
+        # 星形
+        star_btn = self._create_shape_button("星形", "star", "★", {
+            'center': (50, 50),
+            'radius': 40,
+            'points': 5
+        })
+        special_layout.addWidget(star_btn, 1, 0)
+        
+        # 箭头
+        arrow_btn = self._create_shape_button("箭头", "arrow", "→", {
+            'start': (20, 50),
+            'end': (80, 50),
+            'head_size': 15
+        })
+        special_layout.addWidget(arrow_btn, 1, 1)
+        
+        parent_layout.addLayout(special_layout)
+        
+    def _create_shape_button(self, text, shape_type, icon_text, params):
+        """创建图形按钮"""
+        button = QPushButton()
+        button.setFixedSize(60, 60)
+        button.setCursor(Qt.PointingHandCursor)
+        button.setToolTip(f"添加{text}")
+        
+        # 创建图标
+        pixmap = QPixmap(48, 48)
+        pixmap.fill(Qt.transparent)
+        
+        painter = QPainter(pixmap)
+        painter.setRenderHint(QPainter.Antialiasing)
+        painter.setPen(QPen(Qt.black, 2))
+        
+        # 绘制图标
+        if icon_text:
+            font = painter.font()
+            font.setPointSize(20)
+            painter.setFont(font)
+            painter.drawText(pixmap.rect(), Qt.AlignCenter, icon_text)
+        
+        painter.end()
+        
+        button.setIcon(QIcon(pixmap))
+        button.setIconSize(QSize(32, 32))
+        
+        # 连接信号
+        button.clicked.connect(lambda: self._on_shape_clicked(shape_type, params))
+        
+        return button
+        
+    def _on_shape_clicked(self, shape_type, params):
+        """图形按钮点击处理"""
+        # 发送图形选择信号
+        self.shape_selected.emit(shape_type, params)
+        
+    def add_shape_to_document(self, shape_type, params, color_tool=None):
+        """将图形添加到文档"""
+        from DrawPicture.models.shapes import Line, Rectangle, Circle, ArchimedeanSpiral, SineCurve
+        from PyQt5.QtCore import QPointF, QRectF
+        
+        shape = None
+        
+        if shape_type == "line":
+            start = params.get('start', (0, 0))
+            end = params.get('end', (100, 100))
+            shape = Line(QPointF(start[0], start[1]), QPointF(end[0], end[1]))
+            
+        elif shape_type == "rectangle":
+            rect_params = params.get('rect', (0, 0, 100, 80))
+            shape = Rectangle(QRectF(rect_params[0], rect_params[1], rect_params[2], rect_params[3]))
+            
+        elif shape_type == "circle":
+            center = params.get('center', (50, 50))
+            radius = params.get('radius', 50)
+            shape = Circle(QPointF(center[0], center[1]), radius)
+            
+        elif shape_type == "square":
+            rect_params = params.get('rect', (0, 0, 80, 80))
+            shape = Rectangle(QRectF(rect_params[0], rect_params[1], rect_params[2], rect_params[3]))
+            
+        elif shape_type == "spiral":
+            center = params.get('center', (50, 50))
+            a = params.get('a', 0.25)
+            b = params.get('b', 0.25)
+            turns = params.get('turns', 3)
+            shape = ArchimedeanSpiral(QPointF(center[0], center[1]), a, b, turns)
+            
+        elif shape_type == "sine":
+            start = params.get('start', (0, 50))
+            amplitude = params.get('amplitude', 50)
+            frequency = params.get('frequency', 0.05)
+            length = params.get('length', 400)
+            shape = SineCurve(QPointF(start[0], start[1]), amplitude, frequency, length)
+            
+        if shape:
+            # 设置图形属性
+            shape.layer = self.document.current_layer
+            # 应用当前颜色设置
+            if color_tool:
+                shape.set_pen(color_tool.get_pen())
+                shape.set_brush(color_tool.get_brush())
+            # 添加到文档
+            self.document.add_shape(shape)
