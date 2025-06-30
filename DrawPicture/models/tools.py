@@ -3,7 +3,7 @@
 
 from PyQt5.QtCore import Qt, QRectF, QPointF, QPoint, QTime
 from PyQt5.QtGui import (QPen, QBrush, QColor, QCursor, QPixmap, QPainterPath, QPainter,
-                       QLinearGradient, QRadialGradient, QGradient)
+                       QLinearGradient, QRadialGradient, QGradient, QTransform)
 from PyQt5.QtWidgets import QApplication
 import math
 
@@ -101,56 +101,125 @@ class SelectionTool(DrawingTool):
             
         shape = self.document.selected_shapes[0]
         rect = shape._get_global_bounds()
+        center = rect.center()
         
-        # 手柄大小（根据缩放调整）
+        # 手柄大小
         handle_size = 8
         half_handle = handle_size / 2
         
-        # 检查旋转手柄
-        rotation_handle_y = rect.top() - 20
-        rotation_handle_x = rect.left() + rect.width() / 2
-        rotation_area = QRectF(
-            rotation_handle_x - handle_size,
-            rotation_handle_y - handle_size,
-            handle_size * 2,
-            handle_size * 2
-        )
-        if rotation_area.contains(point):
+        # 创建变换矩阵将点转换到图形的旋转坐标系
+        transform = QTransform()
+        transform.translate(center.x(), center.y())
+        transform.rotate(shape.rotation)
+        
+        # 计算逆变换
+        inverted, success = transform.inverted()
+        if not success:
+            return None, -1
+            
+        # 将点转换到旋转坐标系
+        rotated_point = inverted.map(point)
+        
+        # 计算旋转前的矩形尺寸
+        rotated_width = rect.width()
+        rotated_height = rect.height()
+        rotated_rect = QRectF(-rotated_width/2, -rotated_height/2, rotated_width, rotated_height)
+        
+        # 检查旋转手柄（圆形）
+        rotation_handle_y = rotated_rect.top() - 20
+        rotation_handle_x = 0
+        rotation_handle_rect = QRectF(rotation_handle_x - 6, rotation_handle_y - 6, 12, 12)
+        
+        if rotation_handle_rect.contains(rotated_point):
             self.cursor = QCursor(Qt.CrossCursor)
             return 'rotate', -1
             
-        # 检查缩放手柄
-        handles = [
-            (rect.left(), rect.top(), Qt.SizeFDiagCursor),  # 左上
-            (rect.left() + rect.width()/2, rect.top(), Qt.SizeVerCursor),  # 上中
-            (rect.right(), rect.top(), Qt.SizeBDiagCursor),  # 右上
-            (rect.right(), rect.top() + rect.height()/2, Qt.SizeHorCursor),  # 右中
-            (rect.right(), rect.bottom(), Qt.SizeFDiagCursor),  # 右下
-            (rect.left() + rect.width()/2, rect.bottom(), Qt.SizeVerCursor),  # 下中
-            (rect.left(), rect.bottom(), Qt.SizeBDiagCursor),  # 左下
-            (rect.left(), rect.top() + rect.height()/2, Qt.SizeHorCursor),  # 左中
+        # 定义8个控制点的位置
+        handle_positions = [
+            QPointF(rotated_rect.left(), rotated_rect.top()),                # 0 左上
+            QPointF(rotated_rect.center().x(), rotated_rect.top()),          # 1 上中
+            QPointF(rotated_rect.right(), rotated_rect.top()),               # 2 右上
+            QPointF(rotated_rect.right(), rotated_rect.center().y()),        # 3 右中
+            QPointF(rotated_rect.right(), rotated_rect.bottom()),            # 4 右下
+            QPointF(rotated_rect.center().x(), rotated_rect.bottom()),       # 5 下中
+            QPointF(rotated_rect.left(), rotated_rect.bottom()),             # 6 左下
+            QPointF(rotated_rect.left(), rotated_rect.center().y()),         # 7 左中
         ]
         
-        # 检查每个手柄的区域
-        for i, (x, y, cursor_shape) in enumerate(handles):
-            handle_area = QRectF(
-                x - handle_size,
-                y - handle_size,
-                handle_size * 2,
-                handle_size * 2
-            )
-            if handle_area.contains(point):
-                self.cursor = QCursor(cursor_shape)
-                return 'scale', i
+        # 定义每个手柄对应的光标类型
+        cursor_types = [
+            Qt.SizeFDiagCursor,  # 0 左上 - 斜向调整
+            Qt.SizeVerCursor,    # 1 上中 - 垂直调整
+            Qt.SizeBDiagCursor,  # 2 右上 - 斜向调整
+            Qt.SizeHorCursor,    # 3 右中 - 水平调整
+            Qt.SizeFDiagCursor,  # 4 右下 - 斜向调整
+            Qt.SizeVerCursor,    # 5 下中 - 垂直调整
+            Qt.SizeBDiagCursor,  # 6 左下 - 斜向调整
+            Qt.SizeHorCursor     # 7 左中 - 水平调整
+        ]
         
-        # 检查是否在图形内部
-        if rect.contains(point):
+        # 检查缩放手柄
+        for i, pos in enumerate(handle_positions):
+            handle_rect = QRectF(pos.x() - half_handle, pos.y() - half_handle, handle_size, handle_size)
+            if handle_rect.contains(rotated_point):
+                # 根据旋转角度调整光标
+                rotated_cursor = self._get_rotated_cursor(cursor_types[i], shape.rotation)
+                self.cursor = QCursor(rotated_cursor)
+                return 'scale', i
+                
+        # 检查是否在选择框内部（考虑旋转）
+        if rotated_rect.contains(rotated_point):
             self.cursor = QCursor(Qt.SizeAllCursor)
             return 'move', -1
             
-        # 不在任何交互区域时恢复默认光标
+        # 恢复默认光标
         self.cursor = QCursor(Qt.ArrowCursor)
         return None, -1
+        
+    def _get_rotated_cursor(self, cursor_shape, angle):
+        """根据旋转角度获取适当的光标形状"""
+        # 光标基本形状列表（按45度角递增排列）
+        cursor_shapes = [
+            Qt.SizeHorCursor,     # 0度（水平调整）
+            Qt.SizeBDiagCursor,   # 45度（右上-左下调整）
+            Qt.SizeVerCursor,     # 90度（垂直调整）
+            Qt.SizeFDiagCursor,   # 135度（左上-右下调整）
+            Qt.SizeHorCursor,     # 180度（水平调整）
+            Qt.SizeBDiagCursor,   # 225度（右上-左下调整）
+            Qt.SizeVerCursor,     # 270度（垂直调整）
+            Qt.SizeFDiagCursor,   # 315度（左上-右下调整）
+        ]
+        
+        # 根据基本光标类型和旋转角度选择适当的光标
+        if cursor_shape == Qt.SizeHorCursor:
+            # 水平调整光标，转动角度为0、180、360
+            base_idx = 0
+        elif cursor_shape == Qt.SizeVerCursor:
+            # 垂直调整光标，转动角度为90、270
+            base_idx = 2
+        elif cursor_shape == Qt.SizeFDiagCursor:
+            # 左上-右下对角线调整，转动角度为135、315
+            base_idx = 3
+        elif cursor_shape == Qt.SizeBDiagCursor:
+            # 右上-左下对角线调整，转动角度为45、225
+            base_idx = 1
+        else:
+            # 其他光标类型不进行旋转处理
+            return cursor_shape
+            
+        # 计算旋转后的光标索引（每45度一个步长）
+        # 将角度规范化到0-360范围内
+        normalized_angle = angle % 360
+        if normalized_angle < 0:
+            normalized_angle += 360
+            
+        # 计算旋转量（以45度为单位）
+        rotation_step = round(normalized_angle / 45) % 8
+        
+        # 计算最终的光标索引
+        cursor_idx = (base_idx + rotation_step) % 8
+        
+        return cursor_shapes[cursor_idx]
         
     def mouse_press(self, event):
         if event.button() == Qt.LeftButton:
@@ -194,38 +263,37 @@ class SelectionTool(DrawingTool):
     def mouse_move(self, event):
         current_pos = event.pos()
         
-        # 如果没有按下鼠标，只更新光标
-        if not event.buttons() & Qt.LeftButton:
+        if not self.document.selected_shapes:
+            return
+            
+        # 鼠标悬停时更新光标（检测手柄）
+        if not (event.buttons() & Qt.LeftButton):
             handle_type, _ = self.get_handle_at_point(current_pos)
             if handle_type:
                 event.accept()
             return
             
-        if not self.drag_start:
-            return
-            
-        if self.handle_type == 'move':
-            # 移动操作
-            if not self.moving:
-                move_distance = ((current_pos.x() - self.last_position.x()) ** 2 + 
-                               (current_pos.y() - self.last_position.y()) ** 2) ** 0.5
-                if move_distance > self.click_threshold:
-                    self.moving = True
-            
-            if self.moving:
-                delta = QPointF(current_pos - self.last_position)
-                self.document.move_selected_shapes(delta)
+        # 如果正在拖动
+        if self.drag_start is not None:
+            if self.handle_type == 'rotate':
+                self._handle_rotate(current_pos)
+            elif self.handle_type == 'scale':
+                self._handle_scale(current_pos)
+            elif self.handle_type == 'move':
+                # 移动操作
+                if not self.moving:
+                    move_distance = ((current_pos.x() - self.last_position.x()) ** 2 + 
+                                   (current_pos.y() - self.last_position.y()) ** 2) ** 0.5
+                    if move_distance > self.click_threshold:
+                        self.moving = True
                 
-        elif self.handle_type == 'scale':
-            # 缩放操作
-            self._handle_scale(current_pos)
-            
-        elif self.handle_type == 'rotate':
-            # 旋转操作
-            self._handle_rotate(current_pos)
-            
-        self.last_position = current_pos
-        event.accept()  # 接受事件，防止传播
+                if self.moving:
+                    delta = QPointF(current_pos - self.last_position)
+                    self.document.move_selected_shapes(delta)
+                    
+            # 更新上一次位置
+            self.last_position = current_pos
+            event.accept()
         
     def _handle_scale(self, current_pos):
         """处理缩放操作"""
@@ -236,49 +304,139 @@ class SelectionTool(DrawingTool):
         rect = shape._get_global_bounds()
         center = rect.center()
         
-        # 计算初始点和当前点相对于中心的向量
-        start_vector = QPointF(self.drag_start.x() - center.x(),
-                             self.drag_start.y() - center.y())
-        current_vector = QPointF(current_pos.x() - center.x(),
-                               current_pos.y() - center.y())
-                               
         # 保存原始位置和缩放
         original_pos = shape.position
         original_scale_x = shape.scale_x
         original_scale_y = shape.scale_y
-                               
+        original_rotation = shape.rotation
+        
+        # 将鼠标点转换到旋转后的坐标系
+        transform = QTransform()
+        transform.translate(center.x(), center.y())
+        transform.rotate(shape.rotation)
+        inverted, success = transform.inverted()
+        if not success:
+            return
+            
+        # 转换当前点和起始点到旋转后的坐标系
+        rotated_current = inverted.map(current_pos)
+        rotated_start = inverted.map(self.drag_start)
+        
+        # 计算旋转后矩形的尺寸
+        rotated_width = rect.width()
+        rotated_height = rect.height()
+        rotated_rect = QRectF(-rotated_width/2, -rotated_height/2, rotated_width, rotated_height)
+        
         # 根据手柄索引确定缩放方向
         handle_index = self.handle_index
         constrain = bool(QApplication.keyboardModifiers() & Qt.ShiftModifier)
         
         # 计算缩放因子
+        scale_x = 1.0
+        scale_y = 1.0
+        
         if handle_index in [0, 2, 4, 6]:  # 角落手柄
-            # 计算对角线缩放
-            start_dist = (start_vector.x() ** 2 + start_vector.y() ** 2) ** 0.5
-            current_dist = (current_vector.x() ** 2 + current_vector.y() ** 2) ** 0.5
-            
-            if start_dist > 0:
-                scale_x = current_dist / start_dist
-                scale_y = scale_x if constrain else scale_x
+            # 计算在旋转坐标系中的相对移动
+            if handle_index == 0:  # 左上
+                dx = rotated_current.x() - rotated_start.x()
+                dy = rotated_current.y() - rotated_start.y()
+                original_width = rotated_rect.width()
+                original_height = rotated_rect.height()
+                new_width = original_width - 2 * dx
+                new_height = original_height - 2 * dy
                 
-                # 根据手柄位置调整缩放方向
-                if handle_index in [0, 6]:  # 左侧手柄
-                    scale_x = -scale_x
-                if handle_index in [0, 2]:  # 顶部手柄
-                    scale_y = -scale_y
+                if original_width != 0 and original_height != 0:
+                    scale_x = new_width / original_width
+                    scale_y = new_height / original_height
                     
-        else:  # 边中点手柄
-            if handle_index in [1, 5]:  # 上中和下中
-                scale_x = 1.0
-                scale_y = current_vector.y() / start_vector.y() if start_vector.y() != 0 else 1.0
-                if handle_index == 1:  # 上中
-                    scale_y = -scale_y
-            else:  # 左中和右中
-                scale_x = current_vector.x() / start_vector.x() if start_vector.x() != 0 else 1.0
-                scale_y = 1.0
-                if handle_index in [7]:  # 左中
-                    scale_x = -scale_x
+            elif handle_index == 2:  # 右上
+                dx = rotated_current.x() - rotated_start.x()
+                dy = rotated_current.y() - rotated_start.y()
+                original_width = rotated_rect.width()
+                original_height = rotated_rect.height()
+                new_width = original_width + 2 * dx
+                new_height = original_height - 2 * dy
+                
+                if original_width != 0 and original_height != 0:
+                    scale_x = new_width / original_width
+                    scale_y = new_height / original_height
                     
+            elif handle_index == 4:  # 右下
+                dx = rotated_current.x() - rotated_start.x()
+                dy = rotated_current.y() - rotated_start.y()
+                original_width = rotated_rect.width()
+                original_height = rotated_rect.height()
+                new_width = original_width + 2 * dx
+                new_height = original_height + 2 * dy
+                
+                if original_width != 0 and original_height != 0:
+                    scale_x = new_width / original_width
+                    scale_y = new_height / original_height
+                    
+            elif handle_index == 6:  # 左下
+                dx = rotated_current.x() - rotated_start.x()
+                dy = rotated_current.y() - rotated_start.y()
+                original_width = rotated_rect.width()
+                original_height = rotated_rect.height()
+                new_width = original_width - 2 * dx
+                new_height = original_height + 2 * dy
+                
+                if original_width != 0 and original_height != 0:
+                    scale_x = new_width / original_width
+                    scale_y = new_height / original_height
+                    
+            # 如果按下Shift键，保持宽高比
+            if constrain:
+                max_scale = max(abs(scale_x), abs(scale_y))
+                scale_x = max_scale if scale_x > 0 else -max_scale
+                scale_y = max_scale if scale_y > 0 else -max_scale
+                
+        else:  # 中点手柄
+            if handle_index == 1:  # 上中
+                dy = rotated_current.y() - rotated_start.y()
+                original_height = rotated_rect.height()
+                new_height = original_height - 2 * dy
+                
+                if original_height != 0:
+                    scale_y = new_height / original_height
+                    scale_x = 1.0  # 保持宽度不变
+                    
+            elif handle_index == 3:  # 右中
+                dx = rotated_current.x() - rotated_start.x()
+                original_width = rotated_rect.width()
+                new_width = original_width + 2 * dx
+                
+                if original_width != 0:
+                    scale_x = new_width / original_width
+                    scale_y = 1.0  # 保持高度不变
+                    
+            elif handle_index == 5:  # 下中
+                dy = rotated_current.y() - rotated_start.y()
+                original_height = rotated_rect.height()
+                new_height = original_height + 2 * dy
+                
+                if original_height != 0:
+                    scale_y = new_height / original_height
+                    scale_x = 1.0  # 保持宽度不变
+                    
+            elif handle_index == 7:  # 左中
+                dx = rotated_current.x() - rotated_start.x()
+                original_width = rotated_rect.width()
+                new_width = original_width - 2 * dx
+                
+                if original_width != 0:
+                    scale_x = new_width / original_width
+                    scale_y = 1.0  # 保持高度不变
+                    
+        # 防止缩放为零或负值
+        if abs(scale_x) < 0.1:
+            scale_x = 0.1 if scale_x > 0 else -0.1
+        if abs(scale_y) < 0.1:
+            scale_y = 0.1 if scale_y > 0 else -0.1
+            
+        # 记录状态以便撤销
+        self.document.record_state()
+        
         # 应用缩放
         shape.scale_x *= scale_x
         shape.scale_y *= scale_y
@@ -292,6 +450,9 @@ class SelectionTool(DrawingTool):
         delta_y = new_center.y() - center.y()
         new_pos = QPointF(original_pos.x() - delta_x, original_pos.y() - delta_y)
         shape.position = new_pos
+        
+        # 发送文档变化信号，确保界面更新
+        self.document.document_changed.emit()
         
         # 更新起始位置
         self.drag_start = current_pos
@@ -320,6 +481,9 @@ class SelectionTool(DrawingTool):
         if QApplication.keyboardModifiers() & Qt.ShiftModifier:
             angle_delta = round(angle_delta / 15.0) * 15.0
             
+        # 记录状态以便撤销
+        self.document.record_state()
+            
         # 应用旋转
         shape.rotation += angle_delta
         
@@ -332,6 +496,9 @@ class SelectionTool(DrawingTool):
         delta_y = new_center.y() - center.y()
         new_pos = QPointF(original_pos.x() - delta_x, original_pos.y() - delta_y)
         shape.position = new_pos
+        
+        # 发送文档变化信号，确保界面更新
+        self.document.document_changed.emit()
         
         # 更新起始位置
         self.drag_start = current_pos
@@ -370,8 +537,10 @@ class SelectionTool(DrawingTool):
         if event.button() == Qt.LeftButton:
             # 如果进行了变换操作，记录状态
             if self.handle_type in ['scale', 'rotate'] and self.original_shape_data:
-                self.document.record_state()
+                # 记录状态已经在操作过程中完成，这里无需重复
+                pass
             elif self.moving:
+                # 记录移动操作的状态
                 self.document.record_state()
             
             # 重置状态
@@ -384,6 +553,9 @@ class SelectionTool(DrawingTool):
             self.original_shape_data = None
             self.transform_center = None
             self.initial_angle = None
+            
+            # 强制更新视图，确保选择框与图形匹配
+            self.document.document_changed.emit()
 
 
 class LineTool(DrawingTool):

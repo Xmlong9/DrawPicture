@@ -2,7 +2,7 @@
 # -*- coding: utf-8 -*-
 
 from PyQt5.QtWidgets import QWidget, QMenu, QAction, QInputDialog, QMessageBox
-from PyQt5.QtGui import QPainter, QPen, QBrush, QColor, QPainterPath, QCursor
+from PyQt5.QtGui import QPainter, QPen, QBrush, QColor, QPainterPath, QCursor, QTransform
 from PyQt5.QtCore import Qt, QPoint, QPointF, QRectF, pyqtSignal, QTime, QTimer
 
 class Canvas(QWidget):
@@ -192,6 +192,8 @@ class Canvas(QWidget):
         # 绘制选择框
         for shape in self.document.selected_shapes:
             if self.document.is_layer_visible(shape.layer):
+                # 打印调试信息
+                print(f"绘制选择框，图形旋转角度: {shape.rotation}")
                 painter.save()
                 self.draw_selection_handles(painter, shape)
                 painter.restore()
@@ -248,58 +250,67 @@ class Canvas(QWidget):
         
     def draw_selection_handles(self, painter, shape):
         """绘制选择手柄"""
+        # 获取真实的全局边界矩形
         rect = shape._get_global_bounds()
+        
+        # 输出调试信息
+        print(f"绘制选择框，图形旋转角度: {shape.rotation}")
         
         # 设置手柄大小
         handle_size = 8
         half_handle = handle_size / 2
         
-        # 绘制旋转手柄（顶部中心）
-        rotation_handle_y = rect.top() - 20
-        rotation_handle_x = rect.left() + rect.width() / 2
+        # 保存画家状态
+        painter.save()
+        
+        # 将坐标系移动到图形中心，并按照图形的旋转角度旋转坐标系
+        center = rect.center()
+        painter.translate(center)
+        painter.rotate(shape.rotation)
+        
+        # 计算旋转前的矩形尺寸（基于边界框的宽高）
+        rotated_width = rect.width()
+        rotated_height = rect.height()
+        
+        # 创建以原点为中心的矩形
+        rotated_rect = QRectF(-rotated_width/2, -rotated_height/2, rotated_width, rotated_height)
+        
+        # 绘制旋转的选择框
+        painter.setPen(QPen(Qt.blue, 1, Qt.DashLine))
+        painter.setBrush(Qt.NoBrush)
+        painter.drawRect(rotated_rect)
+        
+        # 定义8个控制点的位置
+        handle_positions = [
+            QPointF(rotated_rect.left(), rotated_rect.top()),                # 0 左上
+            QPointF(rotated_rect.center().x(), rotated_rect.top()),          # 1 上中
+            QPointF(rotated_rect.right(), rotated_rect.top()),               # 2 右上
+            QPointF(rotated_rect.right(), rotated_rect.center().y()),        # 3 右中
+            QPointF(rotated_rect.right(), rotated_rect.bottom()),            # 4 右下
+            QPointF(rotated_rect.center().x(), rotated_rect.bottom()),       # 5 下中
+            QPointF(rotated_rect.left(), rotated_rect.bottom()),             # 6 左下
+            QPointF(rotated_rect.left(), rotated_rect.center().y()),         # 7 左中
+        ]
+        
+        # 绘制旋转手柄（顶部中心上方）
+        rotation_handle_y = rotated_rect.top() - 20
+        rotation_handle_x = 0  # 中心点的x坐标
         
         # 绘制旋转图标
         painter.setPen(QPen(Qt.blue, 2))
         painter.setBrush(Qt.white)
-        painter.drawEllipse(QPointF(rotation_handle_x, rotation_handle_y), handle_size, handle_size)
+        # 旋转手柄圆圈
+        painter.drawEllipse(QPointF(rotation_handle_x, rotation_handle_y), 6, 6)
         
-        # 绘制旋转箭头
-        arrow_size = handle_size * 1.2
-        painter.setPen(QPen(Qt.blue, 2))
-        # 绘制圆弧箭头
-        path = QPainterPath()
-        path.moveTo(rotation_handle_x + arrow_size, rotation_handle_y)
-        path.arcTo(rotation_handle_x - arrow_size, rotation_handle_y - arrow_size,
-                  arrow_size * 2, arrow_size * 2, 0, 270)
-        # 绘制箭头头部
-        path.lineTo(rotation_handle_x + arrow_size/2, rotation_handle_y - arrow_size - arrow_size/4)
-        path.lineTo(rotation_handle_x + arrow_size + arrow_size/4, rotation_handle_y - arrow_size)
-        path.lineTo(rotation_handle_x + arrow_size, rotation_handle_y)
-        painter.drawPath(path)
-        
-        # 绘制缩放手柄
-        handles = [
-            (rect.left(), rect.top()),  # 左上
-            (rect.left() + rect.width()/2, rect.top()),  # 上中
-            (rect.right(), rect.top()),  # 右上
-            (rect.right(), rect.top() + rect.height()/2),  # 右中
-            (rect.right(), rect.bottom()),  # 右下
-            (rect.left() + rect.width()/2, rect.bottom()),  # 下中
-            (rect.left(), rect.bottom()),  # 左下
-            (rect.left(), rect.top() + rect.height()/2),  # 左中
-        ]
-        
-        # 绘制白色方块手柄
+        # 绘制8个缩放手柄
         painter.setPen(QPen(Qt.blue, 1))
         painter.setBrush(Qt.white)
-        for x, y in handles:
-            painter.drawRect(QRectF(x - handle_size, y - handle_size,
-                                  handle_size * 2, handle_size * 2))
-                                  
-        # 绘制选择框
-        painter.setPen(QPen(Qt.blue, 1, Qt.SolidLine))
-        painter.setBrush(Qt.NoBrush)
-        painter.drawRect(rect)
+        
+        for pos in handle_positions:
+            painter.drawRect(QRectF(pos.x() - half_handle, pos.y() - half_handle, handle_size, handle_size))
+        
+        # 恢复画家状态
+        painter.restore()
             
     def mapToScene(self, point):
         """将窗口坐标映射到场景坐标"""
