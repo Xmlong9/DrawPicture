@@ -597,6 +597,7 @@ class Document(QObject):
         # 图形列表
         self.shapes = []
         self.selected_shapes = []  # 存储选中的图形
+        self.temp_shapes = []  # 临时形状，用于预览
         
         # 文件信息
         self.file_path = None  # 文档文件路径
@@ -1156,4 +1157,22 @@ class Document(QObject):
     
     def set_modified(self, modified):
         """设置文档修改状态"""
-        self.modified = modified 
+        self.modified = modified
+
+    def add_temp_shape(self, shape):
+        """添加临时形状，用于预览"""
+        if shape not in self.temp_shapes:
+            self.temp_shapes.append(shape)
+            self.document_changed.emit()
+        
+    def remove_temp_shape(self, shape):
+        """移除临时形状"""
+        if shape in self.temp_shapes:
+            self.temp_shapes.remove(shape)
+            self.document_changed.emit()
+    
+    def clear_temp_shapes(self):
+        """清除所有临时形状"""
+        if self.temp_shapes:
+            self.temp_shapes.clear()
+            self.document_changed.emit() 

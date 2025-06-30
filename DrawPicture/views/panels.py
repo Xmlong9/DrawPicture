@@ -51,6 +51,7 @@ class ToolPanel(QWidget):
         self.rectangle_btn = self._create_tool_button("矩形", "rectangle", "□")
         self.circle_btn = self._create_tool_button("圆形", "circle", "○")
         self.freehand_btn = self._create_tool_button("自由绘制", "freehand", "✎")
+        self.pen_btn = self._create_tool_button("钢笔", "pen", "✏")
         self.spiral_btn = self._create_tool_button("螺线", "spiral", "@")
         self.sine_btn = self._create_tool_button("正弦曲线", "sine", "~")
         self.eraser_btn = self._create_tool_button("橡皮擦", "eraser", "☒")
@@ -113,6 +114,7 @@ class ToolPanel(QWidget):
         tools_layout.addWidget(self.rectangle_btn)
         tools_layout.addWidget(self.circle_btn)
         tools_layout.addWidget(self.freehand_btn)
+        tools_layout.addWidget(self.pen_btn)
         tools_layout.addWidget(self.spiral_btn)
         tools_layout.addWidget(self.sine_btn)
         tools_layout.addWidget(self.eraser_btn)
@@ -177,7 +179,7 @@ class ToolPanel(QWidget):
         """工具按钮点击处理"""
         # 清除所有按钮的选中状态
         for btn in [self.selection_btn, self.pan_btn, self.line_btn, self.rectangle_btn, 
-                  self.circle_btn, self.freehand_btn, self.spiral_btn, self.sine_btn,
+                  self.circle_btn, self.freehand_btn, self.pen_btn, self.spiral_btn, self.sine_btn,
                   self.eraser_btn]:
             btn.setChecked(False)
             
@@ -197,6 +199,8 @@ class ToolPanel(QWidget):
             self.circle_btn.setChecked(True)
         elif tool_name == "freehand":
             self.freehand_btn.setChecked(True)
+        elif tool_name == "pen":
+            self.pen_btn.setChecked(True)
         elif tool_name == "spiral":
             self.spiral_btn.setChecked(True)
         elif tool_name == "sine":

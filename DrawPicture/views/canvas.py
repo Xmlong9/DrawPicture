@@ -196,6 +196,12 @@ class Canvas(QWidget):
                 self.draw_selection_handles(painter, shape)
                 painter.restore()
                 
+        # 绘制临时形状（如预览线）
+        for shape in self.document.temp_shapes:
+            painter.save()
+            shape.paint(painter)
+            painter.restore()
+                
         # 绘制当前正在创建的图形
         if self.current_tool and self.current_tool.current_shape:
             self.current_tool.current_shape.paint(painter)
@@ -338,6 +344,15 @@ class Canvas(QWidget):
             # 强制重绘画布，确保选择框位置更新
             self.update()
             
+    def mouseDoubleClickEvent(self, event):
+        """鼠标双击事件"""
+        if self.current_tool and hasattr(self.current_tool, 'mouse_double_click'):
+            scene_pos = self.mapToScene(event.pos())
+            scene_event = type(event)(event.type(), scene_pos, event.button(),
+                                   event.buttons(), event.modifiers())
+            self.current_tool.mouse_double_click(scene_event)
+            self.update()
+            
     def wheelEvent(self, event):
         """鼠标滚轮事件 - 用于缩放"""
         if event.modifiers() & Qt.ControlModifier:
@@ -368,6 +383,13 @@ class Canvas(QWidget):
         # 重做操作
         elif event.key() == Qt.Key_Y and event.modifiers() & Qt.ControlModifier:
             self.document.redo()
+            
+        # ESC键结束当前工具的绘制
+        elif event.key() == Qt.Key_Escape:
+            if self.current_tool and hasattr(self.current_tool, 'finish_path'):
+                self.current_tool.finish_path()
+                self.update()
+                self.status_message.emit("已结束路径绘制")
             
     def toggle_grid(self):
         """切换网格显示状态"""

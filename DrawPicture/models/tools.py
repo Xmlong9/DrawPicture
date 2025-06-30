@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
 
-from PyQt5.QtCore import Qt, QRectF, QPointF, QPoint
+from PyQt5.QtCore import Qt, QRectF, QPointF, QPoint, QTime
 from PyQt5.QtGui import (QPen, QBrush, QColor, QCursor, QPixmap, QPainterPath, QPainter,
                        QLinearGradient, QRadialGradient, QGradient)
 from PyQt5.QtWidgets import QApplication
@@ -9,7 +9,8 @@ import math
 
 from DrawPicture.models.shapes import (Line, Rectangle, Circle, ArchimedeanSpiral, 
                                      SineCurve, Freehand, MandelbrotSet, JuliaSet, 
-                                     SuperEllipse, ParametricCurve, Gear, Leaf, Cloud)
+                                     SuperEllipse, ParametricCurve, Gear, Leaf, Cloud,
+                                     PenPath)
 
 # 定义工具类型枚举
 class ToolType:
@@ -28,6 +29,7 @@ class ToolType:
     GEAR = "齿轮"
     LEAF = "树叶"
     CLOUD = "云朵"
+    PEN = "钢笔"
 
 class DrawingTool:
     """绘图工具基类"""
@@ -1190,26 +1192,142 @@ class CloudTool(DrawingTool):
     def mouse_press(self, event):
         if event.button() == Qt.LeftButton:
             self.start_point = event.pos()
-            self.current_shape = Cloud(self.start_point)
-            if self.color_tool:
-                self.apply_current_style(self.current_shape)
             self.is_drawing = True
-        
+            self.current_shape = Cloud(
+                center=self.start_point,
+                width=1,  # 初始宽度
+                height=1,  # 初始高度
+                color=self.color_tool.line_color if self.color_tool else QColor(0, 0, 0),
+                fill_color=self.color_tool.fill_color if self.color_tool else None,
+                line_width=self.color_tool.line_width if self.color_tool else 1,
+                line_style=self.color_tool.line_style if self.color_tool else Qt.SolidLine,
+                layer=self.document.current_layer
+            )
+            self.apply_current_style(self.current_shape)
+            self.document.add_shape(self.current_shape)
+            
     def mouse_move(self, event):
-        if self.is_drawing:
-            # 根据鼠标位置调整云朵大小
-            dx = event.pos().x() - self.start_point.x()
-            dy = event.pos().y() - self.start_point.y()
+        if self.is_drawing and self.current_shape:
+            # 计算宽度和高度
+            width = abs(event.x() - self.start_point.x()) * 2
+            height = abs(event.y() - self.start_point.y()) * 2
             
-            if abs(dx) > 5:
-                self.current_shape.width = abs(dx)
+            # 更新云朵属性
+            self.current_shape.width = max(10, width)
+            self.current_shape.height = max(10, height)
             
-            if abs(dy) > 5:
-                self.current_shape.height = abs(dy)
-    
+            # 通知文档更新
+            self.document.document_changed.emit()
+            
     def mouse_release(self, event):
         if event.button() == Qt.LeftButton and self.is_drawing:
             self.is_drawing = False
-            if self.current_shape.width > 5 and self.current_shape.height > 5:
-                self.document.add_shape(self.current_shape)
             self.current_shape = None
+            self.document.record_state()
+
+
+class PenTool(DrawingTool):
+    """钢笔工具，用于创建连接的直线段"""
+    def __init__(self, document):
+        super().__init__(document)
+        self.name = "钢笔"
+        self.cursor = QCursor(Qt.CrossCursor)
+        self.current_path = None
+        self.last_point = None
+        self.preview_line = None  # 用于预览下一条线段
+        self.last_click_time = 0  # 记录上次点击时间
+        self.double_click_interval = 400  # 双击时间间隔（毫秒）
+        
+    def mouse_press(self, event):
+        if event.button() == Qt.LeftButton:
+            current_pos = event.pos()
+            current_time = QTime.currentTime().msecsSinceStartOfDay()
+            
+            # 检查是否是双击（与上次点击时间间隔小于阈值）
+            if self.current_path and (current_time - self.last_click_time < self.double_click_interval):
+                # 双击结束路径
+                self.finish_path()
+                self.last_click_time = 0  # 重置点击时间
+                return
+                
+            # 更新点击时间
+            self.last_click_time = current_time
+            
+            # 如果是第一个点，创建新路径
+            if not self.current_path:
+                self.current_path = PenPath(
+                    color=self.color_tool.line_color if self.color_tool else QColor(0, 0, 0),
+                    fill_color=self.color_tool.fill_color if self.color_tool else None,
+                    line_width=self.color_tool.line_width if self.color_tool else 1,
+                    line_style=self.color_tool.line_style if self.color_tool else Qt.SolidLine,
+                    layer=self.document.current_layer
+                )
+                self.apply_current_style(self.current_path)
+                self.document.add_shape(self.current_path)
+                
+                # 添加第一个点
+                self.current_path.add_point(current_pos)
+                self.last_point = current_pos
+            else:
+                # 添加新的点
+                self.current_path.add_point(current_pos)
+                self.last_point = current_pos
+                self.document.document_changed.emit()
+                
+            self.is_drawing = True
+            
+    def mouse_move(self, event):
+        if self.is_drawing and self.current_path and self.last_point:
+            # 显示从最后一个点到当前位置的预览线
+            current_pos = event.pos()
+            
+            # 使用临时线条来显示预览
+            if not self.preview_line:
+                self.preview_line = Line(
+                    self.last_point,
+                    current_pos,
+                    self.color_tool.line_color if self.color_tool else QColor(0, 0, 0),
+                    None,
+                    self.color_tool.line_width if self.color_tool else 1,
+                    Qt.DashLine,
+                    self.document.current_layer
+                )
+                self.document.add_temp_shape(self.preview_line)
+            else:
+                # 更新预览线的终点
+                self.preview_line.end_point = current_pos
+                self.document.document_changed.emit()
+    
+    def mouse_release(self, event):
+        if event.button() == Qt.LeftButton and self.is_drawing:
+            # 在鼠标释放时，我们不结束绘制，只记录当前状态
+            if self.preview_line:
+                self.document.remove_temp_shape(self.preview_line)
+                self.preview_line = None
+            self.document.record_state()
+    
+    def mouse_double_click(self, event):
+        """处理鼠标双击事件"""
+        if event.button() == Qt.LeftButton and self.current_path:
+            self.finish_path()
+            
+    def finish_path(self):
+        """完成当前路径"""
+        if self.current_path:
+            if self.preview_line:
+                self.document.remove_temp_shape(self.preview_line)
+                self.preview_line = None
+            self.is_drawing = False
+            self.current_path = None
+            self.last_point = None
+            self.document.record_state()
+            
+    def close_path(self):
+        """闭合当前路径"""
+        if self.current_path and len(self.current_path.points) > 2:
+            if self.preview_line:
+                self.document.remove_temp_shape(self.preview_line)
+                self.preview_line = None
+            self.current_path.close_path()
+            self.finish_path()
+            self.document.document_changed.emit()
