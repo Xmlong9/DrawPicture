@@ -6,7 +6,9 @@ from PyQt5.QtGui import QPen, QBrush, QColor, QCursor, QPixmap, QPainterPath, QP
 from PyQt5.QtWidgets import QApplication
 import math
 
-from DrawPicture.models.shapes import Line, Rectangle, Circle, ArchimedeanSpiral, SineCurve, Freehand
+from DrawPicture.models.shapes import (Line, Rectangle, Circle, ArchimedeanSpiral, 
+                                     SineCurve, Freehand, MandelbrotSet, JuliaSet, 
+                                     SuperEllipse, ParametricCurve, Gear, Leaf, Cloud)
 
 # 定义工具类型枚举
 class ToolType:
@@ -19,6 +21,12 @@ class ToolType:
     SINE = "正弦曲线"
     PAN = "平移"
     ERASER = "橡皮擦"
+    SUPERELLIPSE = "超椭圆"
+    PARAMETRIC = "参数曲线"
+    ADVANCED = "高级图形"
+    GEAR = "齿轮"
+    LEAF = "树叶"
+    CLOUD = "云朵"
 
 class DrawingTool:
     """绘图工具基类"""
@@ -872,3 +880,244 @@ class PanTool(DrawingTool):
             self.cursor = QCursor(Qt.OpenHandCursor)  # 恢复光标为开放手形
             if self.canvas:
                 self.canvas.setCursor(self.cursor) 
+
+
+class MandelbrotTool(DrawingTool):
+    """曼德勃罗集工具"""
+    def __init__(self, document):
+        super().__init__(document)
+        self.name = "曼德勃罗集"
+        self.cursor = QCursor(Qt.CrossCursor)
+        
+    def mouse_press(self, event):
+        if event.button() == Qt.LeftButton:
+            self.start_point = event.pos()
+            self.current_shape = MandelbrotSet(QRectF(self.start_point.x(), self.start_point.y(), 0, 0))
+            if self.color_tool:
+                self.apply_current_style(self.current_shape)
+            self.is_drawing = True
+        
+    def mouse_move(self, event):
+        if self.is_drawing:
+            pos = event.pos()
+            rect = QRectF(
+                min(self.start_point.x(), pos.x()),
+                min(self.start_point.y(), pos.y()),
+                abs(pos.x() - self.start_point.x()),
+                abs(pos.y() - self.start_point.y())
+            )
+            self.current_shape.rect = rect
+    
+    def mouse_release(self, event):
+        if event.button() == Qt.LeftButton and self.is_drawing:
+            self.is_drawing = False
+            if self.current_shape.rect.width() > 5 and self.current_shape.rect.height() > 5:
+                self.document.add_shape(self.current_shape)
+            self.current_shape = None
+
+
+class JuliaTool(DrawingTool):
+    """朱利亚集工具"""
+    def __init__(self, document):
+        super().__init__(document)
+        self.name = "朱利亚集"
+        self.cursor = QCursor(Qt.CrossCursor)
+        
+    def mouse_press(self, event):
+        if event.button() == Qt.LeftButton:
+            self.start_point = event.pos()
+            self.current_shape = JuliaSet(QRectF(self.start_point.x(), self.start_point.y(), 0, 0))
+            if self.color_tool:
+                self.apply_current_style(self.current_shape)
+            self.is_drawing = True
+        
+    def mouse_move(self, event):
+        if self.is_drawing:
+            pos = event.pos()
+            rect = QRectF(
+                min(self.start_point.x(), pos.x()),
+                min(self.start_point.y(), pos.y()),
+                abs(pos.x() - self.start_point.x()),
+                abs(pos.y() - self.start_point.y())
+            )
+            self.current_shape.rect = rect
+    
+    def mouse_release(self, event):
+        if event.button() == Qt.LeftButton and self.is_drawing:
+            self.is_drawing = False
+            if self.current_shape.rect.width() > 5 and self.current_shape.rect.height() > 5:
+                self.document.add_shape(self.current_shape)
+            self.current_shape = None
+
+
+class SuperEllipseTool(DrawingTool):
+    """超椭圆工具"""
+    def __init__(self, document):
+        super().__init__(document)
+        self.name = "超椭圆"
+        self.cursor = QCursor(Qt.CrossCursor)
+        
+    def mouse_press(self, event):
+        if event.button() == Qt.LeftButton:
+            self.start_point = event.pos()
+            self.current_shape = SuperEllipse(self.start_point)
+            if self.color_tool:
+                self.apply_current_style(self.current_shape)
+            self.is_drawing = True
+        
+    def mouse_move(self, event):
+        if self.is_drawing:
+            pos = event.pos()
+            dx = pos.x() - self.start_point.x()
+            dy = pos.y() - self.start_point.y()
+            self.current_shape.a = abs(dx)
+            self.current_shape.b = abs(dy)
+    
+    def mouse_release(self, event):
+        if event.button() == Qt.LeftButton and self.is_drawing:
+            self.is_drawing = False
+            if self.current_shape.a > 5 and self.current_shape.b > 5:
+                self.document.add_shape(self.current_shape)
+            self.current_shape = None
+
+
+class ParametricCurveTool(DrawingTool):
+    """参数曲线工具"""
+    def __init__(self, document, curve_type="rose"):
+        super().__init__(document)
+        self.curve_type = curve_type
+        self.name = {
+            "rose": "玫瑰线",
+            "heart": "心形线",
+            "butterfly": "蝴蝶线"
+        }[curve_type]
+        self.cursor = QCursor(Qt.CrossCursor)
+        
+    def mouse_press(self, event):
+        if event.button() == Qt.LeftButton:
+            self.start_point = event.pos()
+            self.current_shape = ParametricCurve(self.start_point, 0, self.curve_type)
+            if self.color_tool:
+                self.apply_current_style(self.current_shape)
+            self.is_drawing = True
+        
+    def mouse_move(self, event):
+        if self.is_drawing:
+            pos = event.pos()
+            dx = pos.x() - self.start_point.x()
+            dy = pos.y() - self.start_point.y()
+            radius = math.sqrt(dx*dx + dy*dy)
+            self.current_shape.radius = radius
+    
+    def mouse_release(self, event):
+        if event.button() == Qt.LeftButton and self.is_drawing:
+            self.is_drawing = False
+            if self.current_shape.radius > 5:
+                self.document.add_shape(self.current_shape)
+            self.current_shape = None
+
+
+class GearTool(DrawingTool):
+    """齿轮工具"""
+    def __init__(self, document):
+        super().__init__(document)
+        self.name = "齿轮"
+        self.cursor = QCursor(Qt.CrossCursor)
+        
+    def mouse_press(self, event):
+        if event.button() == Qt.LeftButton:
+            self.start_point = event.pos()
+            self.current_shape = Gear(self.start_point)
+            if self.color_tool:
+                self.apply_current_style(self.current_shape)
+            self.is_drawing = True
+        
+    def mouse_move(self, event):
+        if self.is_drawing:
+            # 根据鼠标位置调整齿轮大小
+            dx = event.pos().x() - self.start_point.x()
+            dy = event.pos().y() - self.start_point.y()
+            radius = math.sqrt(dx*dx + dy*dy)
+            
+            if radius > 5:
+                self.current_shape.outer_radius = radius
+                # 根据半径调整齿数和齿深
+                self.current_shape.tooth_count = max(8, min(40, int(radius / 10)))
+                self.current_shape.tooth_depth = radius * 0.15
+    
+    def mouse_release(self, event):
+        if event.button() == Qt.LeftButton and self.is_drawing:
+            self.is_drawing = False
+            if self.current_shape.outer_radius > 5:
+                self.document.add_shape(self.current_shape)
+            self.current_shape = None
+
+
+class LeafTool(DrawingTool):
+    """树叶工具"""
+    def __init__(self, document):
+        super().__init__(document)
+        self.name = "树叶"
+        self.cursor = QCursor(Qt.CrossCursor)
+        
+    def mouse_press(self, event):
+        if event.button() == Qt.LeftButton:
+            self.start_point = event.pos()
+            self.current_shape = Leaf(self.start_point)
+            if self.color_tool:
+                self.apply_current_style(self.current_shape)
+            self.is_drawing = True
+        
+    def mouse_move(self, event):
+        if self.is_drawing:
+            # 根据鼠标位置调整树叶大小和角度
+            dx = event.pos().x() - self.start_point.x()
+            dy = event.pos().y() - self.start_point.y()
+            size = math.sqrt(dx*dx + dy*dy)
+            angle = math.degrees(math.atan2(dy, dx))
+            
+            if size > 5:
+                self.current_shape.size = size
+                self.current_shape.angle = angle
+    
+    def mouse_release(self, event):
+        if event.button() == Qt.LeftButton and self.is_drawing:
+            self.is_drawing = False
+            if self.current_shape.size > 5:
+                self.document.add_shape(self.current_shape)
+            self.current_shape = None
+
+
+class CloudTool(DrawingTool):
+    """云朵工具"""
+    def __init__(self, document):
+        super().__init__(document)
+        self.name = "云朵"
+        self.cursor = QCursor(Qt.CrossCursor)
+        
+    def mouse_press(self, event):
+        if event.button() == Qt.LeftButton:
+            self.start_point = event.pos()
+            self.current_shape = Cloud(self.start_point)
+            if self.color_tool:
+                self.apply_current_style(self.current_shape)
+            self.is_drawing = True
+        
+    def mouse_move(self, event):
+        if self.is_drawing:
+            # 根据鼠标位置调整云朵大小
+            dx = event.pos().x() - self.start_point.x()
+            dy = event.pos().y() - self.start_point.y()
+            
+            if abs(dx) > 5:
+                self.current_shape.width = abs(dx)
+            
+            if abs(dy) > 5:
+                self.current_shape.height = abs(dy)
+    
+    def mouse_release(self, event):
+        if event.button() == Qt.LeftButton and self.is_drawing:
+            self.is_drawing = False
+            if self.current_shape.width > 5 and self.current_shape.height > 5:
+                self.document.add_shape(self.current_shape)
+            self.current_shape = None

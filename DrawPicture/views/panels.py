@@ -10,7 +10,7 @@ from PyQt5.QtWidgets import (QWidget, QVBoxLayout, QHBoxLayout, QPushButton, QLa
 from PyQt5.QtGui import QIcon, QColor, QPainter, QPixmap, QPen, QBrush, QPalette
 from PyQt5.QtCore import Qt, QSize, pyqtSignal, QTimer, QPointF, QRectF
 
-from DrawPicture.models.document import DrawingDocument
+from DrawPicture.models.document import Document
 from DrawPicture.models.tools import ToolType
 
 class ToolPanel(QWidget):
@@ -46,6 +46,57 @@ class ToolPanel(QWidget):
         self.sine_btn = self._create_tool_button("正弦曲线", "sine", "~")
         self.eraser_btn = self._create_tool_button("橡皮擦", "eraser", "☒")
         
+        # 创建高级图形菜单按钮
+        self.advanced_btn = QPushButton("高级图形")
+        self.advanced_btn.setFixedHeight(36)
+        self.advanced_menu = QMenu(self)
+        
+        # 创建子菜单
+        self.superellipse_menu = QMenu("超椭圆", self)
+        self.parametric_menu = QMenu("参数曲线", self)
+        self.engineering_menu = QMenu("工程图形", self)
+        self.nature_menu = QMenu("自然形态", self)
+        
+        # 添加超椭圆动作
+        self.superellipse_action = QAction("超椭圆", self)
+        self.superellipse_menu.addAction(self.superellipse_action)
+        
+        # 添加参数曲线动作
+        self.rose_action = QAction("玫瑰线", self)
+        self.heart_action = QAction("心形线", self)
+        self.butterfly_action = QAction("蝴蝶线", self)
+        self.parametric_menu.addAction(self.rose_action)
+        self.parametric_menu.addAction(self.heart_action)
+        self.parametric_menu.addAction(self.butterfly_action)
+        
+        # 添加工程图形动作
+        self.gear_action = QAction("齿轮", self)
+        self.engineering_menu.addAction(self.gear_action)
+        
+        # 添加自然形态动作
+        self.leaf_action = QAction("树叶", self)
+        self.cloud_action = QAction("云朵", self)
+        self.nature_menu.addAction(self.leaf_action)
+        self.nature_menu.addAction(self.cloud_action)
+        
+        # 将子菜单添加到高级图形菜单
+        self.advanced_menu.addMenu(self.superellipse_menu)
+        self.advanced_menu.addMenu(self.parametric_menu)
+        self.advanced_menu.addMenu(self.engineering_menu)
+        self.advanced_menu.addMenu(self.nature_menu)
+        
+        # 设置高级图形按钮的菜单
+        self.advanced_btn.setMenu(self.advanced_menu)
+        
+        # 连接所有动作的信号
+        self.superellipse_action.triggered.connect(lambda: self._on_tool_clicked("superellipse"))
+        self.rose_action.triggered.connect(lambda: self._on_tool_clicked("parametric_rose"))
+        self.heart_action.triggered.connect(lambda: self._on_tool_clicked("parametric_heart"))
+        self.butterfly_action.triggered.connect(lambda: self._on_tool_clicked("parametric_butterfly"))
+        self.gear_action.triggered.connect(lambda: self._on_tool_clicked("gear"))
+        self.leaf_action.triggered.connect(lambda: self._on_tool_clicked("leaf"))
+        self.cloud_action.triggered.connect(lambda: self._on_tool_clicked("cloud"))
+        
         # 将按钮添加到布局
         tools_layout.addWidget(self.selection_btn)
         tools_layout.addWidget(self.pan_btn)
@@ -56,6 +107,16 @@ class ToolPanel(QWidget):
         tools_layout.addWidget(self.spiral_btn)
         tools_layout.addWidget(self.sine_btn)
         tools_layout.addWidget(self.eraser_btn)
+        
+        # 添加分隔线
+        separator = QFrame()
+        separator.setFrameShape(QFrame.HLine)
+        separator.setFrameShadow(QFrame.Sunken)
+        tools_layout.addWidget(separator)
+        
+        # 添加高级图形菜单按钮
+        tools_layout.addWidget(self.advanced_btn)
+        
         tools_layout.addStretch(1)
         
         tools_group.setLayout(tools_layout)
@@ -108,7 +169,7 @@ class ToolPanel(QWidget):
         # 清除所有按钮的选中状态
         for btn in [self.selection_btn, self.pan_btn, self.line_btn, self.rectangle_btn, 
                   self.circle_btn, self.freehand_btn, self.spiral_btn, self.sine_btn,
-                  self.eraser_btn]:  # 包含所有工具按钮
+                  self.eraser_btn]:
             btn.setChecked(False)
             
         # 设置当前工具
@@ -132,7 +193,8 @@ class ToolPanel(QWidget):
         elif tool_name == "sine":
             self.sine_btn.setChecked(True)
         elif tool_name == "eraser":
-            self.eraser_btn.setChecked(True)  # 设置橡皮擦按钮选中状态
+            self.eraser_btn.setChecked(True)
+        # 高级图形工具不需要设置选中状态，因为它们是菜单项
             
         # 发送信号
         self.tool_selected.emit(tool_name)
@@ -430,7 +492,7 @@ class LayerPanel(QWidget):
     # 定义信号
     layer_changed = pyqtSignal(str)
     
-    def __init__(self, document: DrawingDocument):
+    def __init__(self, document: Document):
         super().__init__()
         
         self.document = document
