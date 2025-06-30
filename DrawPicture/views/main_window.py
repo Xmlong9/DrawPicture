@@ -2,7 +2,7 @@
 # -*- coding: utf-8 -*-
 
 from PyQt5.QtWidgets import (QMainWindow, QDockWidget, QAction, QFileDialog,
-                         QMessageBox, QToolBar, QHBoxLayout, QWidget, QLabel)
+                         QMessageBox, QToolBar, QHBoxLayout, QWidget, QLabel, QVBoxLayout)
 from PyQt5.QtGui import QPainter, QPen, QPixmap, QIcon, QBrush, QColor, QImage
 from PyQt5.QtCore import Qt, QSize, QPoint, QRect, QPointF
 
@@ -28,11 +28,10 @@ class MainWindow(QMainWindow):
         self.init_tools()
         
         # 初始化UI
-        self.init_ui()
+        self._setup_ui()
         
         # 设置窗口属性
         self.setWindowTitle("DrawPicture - 专业绘图工具")
-        self.resize(1200, 800)
         
         # 创建应用程序图标
         self._create_app_icon()
@@ -295,49 +294,81 @@ class MainWindow(QMainWindow):
         # 默认选择选择工具
         self.current_tool = self.tools["selection"]
         
-    def init_ui(self):
-        """初始化UI"""
-        # 创建中央部件
-        central_widget = QWidget()
-        central_layout = QHBoxLayout(central_widget)
-        central_layout.setContentsMargins(0, 0, 0, 0)  # 移除边距
+    def _setup_ui(self):
+        """设置UI布局"""
+        # 创建主窗口布局
+        main_layout = QHBoxLayout()
+        main_layout.setSpacing(5)
+        main_layout.setContentsMargins(5, 5, 5, 5)
+        
+        # 左侧面板（工具箱和图形库）
+        left_panel = QVBoxLayout()
+        left_panel.setSpacing(10)
+        
+        # 工具箱
+        self.tool_panel = ToolPanel()
+        self.tool_panel.tool_selected.connect(self.on_tool_selected)
+        self.tool_panel.setMinimumWidth(180)
+        self.tool_panel.setMaximumWidth(220)
+        left_panel.addWidget(self.tool_panel)
+        
+        # 图形库
+        self.shape_library = ShapeLibraryPanel(self.document)
+        self.shape_library.shape_selected.connect(self.on_shape_selected)
+        self.shape_library.setMinimumWidth(180)
+        self.shape_library.setMaximumWidth(220)
+        left_panel.addWidget(self.shape_library)
+        
+        # 添加左侧面板到主布局
+        main_layout.addLayout(left_panel)
+        
+        # 中央画布区域
+        canvas_container = QVBoxLayout()
         
         # 创建画布
         self.canvas = Canvas(self.document)
         self.canvas.set_tool(self.current_tool)
         self.canvas.status_message.connect(self.set_status_message)
         self.canvas.zoom_changed.connect(self._update_zoom_indicator)
-        central_layout.addWidget(self.canvas)
+        self.canvas.setMinimumSize(800, 600)
+        canvas_container.addWidget(self.canvas)
         
         # 为平移工具设置画布引用
         if "pan" in self.tools:
             self.tools["pan"].set_canvas(self.canvas)
         
-        self.setCentralWidget(central_widget)
+        # 添加画布区域到主布局
+        main_layout.addLayout(canvas_container, 1)
         
-        # 设置工具面板
-        self.tool_panel = ToolPanel()
-        self.tool_panel.tool_selected.connect(self.on_tool_selected)
-        self.tool_dock = self.create_dock_widget("工具", self.tool_panel, Qt.LeftDockWidgetArea)
+        # 右侧面板（图层和颜色面板）
+        right_panel = QVBoxLayout()
+        right_panel.setSpacing(10)
         
-        # 设置颜色面板
+        # 图层面板
+        self.layer_panel = LayerPanel(self.document)
+        self.layer_panel.layer_changed.connect(self._update_layer_indicator)
+        self.layer_panel.setMinimumWidth(280)  # 增加最小宽度
+        self.layer_panel.setMaximumWidth(320)  # 增加最大宽度
+        right_panel.addWidget(self.layer_panel)
+        
+        # 颜色面板
         self.color_panel = ColorPanel()
         self.color_panel.color_changed.connect(self.on_color_changed)
         self.color_panel.line_width_changed.connect(self.on_line_width_changed)
         self.color_panel.line_style_changed.connect(self.on_line_style_changed)
         self.color_panel.eraser_size_changed.connect(self.on_eraser_size_changed)
         self.color_panel.gradient_changed.connect(self.on_gradient_changed)  # 连接渐变色信号
-        self.color_dock = self.create_dock_widget("颜色", self.color_panel, Qt.LeftDockWidgetArea)
+        self.color_panel.setMinimumWidth(280)  # 增加最小宽度
+        self.color_panel.setMaximumWidth(320)  # 增加最大宽度
+        right_panel.addWidget(self.color_panel)
         
-        # 设置图层面板
-        self.layer_panel = LayerPanel(self.document)
-        self.layer_panel.layer_changed.connect(self._update_layer_indicator)
-        self.layer_dock = self.create_dock_widget("图层", self.layer_panel, Qt.RightDockWidgetArea)
+        # 添加右侧面板到主布局
+        main_layout.addLayout(right_panel)
         
-        # 创建图形库面板
-        self.shape_library_panel = ShapeLibraryPanel(self.document)
-        self.shape_library_panel.shape_selected.connect(self.on_shape_selected)
-        self.create_dock_widget("图形库", self.shape_library_panel, Qt.RightDockWidgetArea)
+        # 设置中央部件
+        central_widget = QWidget()
+        central_widget.setLayout(main_layout)
+        self.setCentralWidget(central_widget)
         
         # 创建菜单和工具栏
         self.create_menus()
@@ -345,6 +376,10 @@ class MainWindow(QMainWindow):
         
         # 创建增强的状态栏
         self._setup_status_bar()
+        
+        # 设置窗口属性
+        self.setMinimumSize(1280, 1000)  # 增加最小窗口高度
+        self.resize(1600, 1200)  # 设置默认窗口大小，增加高度
         
     def _setup_status_bar(self):
         """设置增强的状态栏"""
@@ -406,7 +441,16 @@ class MainWindow(QMainWindow):
         dock = QDockWidget(title, self)
         dock.setWidget(widget)
         dock.setAllowedAreas(Qt.LeftDockWidgetArea | Qt.RightDockWidgetArea)
-        dock.setMinimumWidth(150)  # 设置最小宽度
+        
+        # 根据不同的面板设置不同的宽度
+        if title == "颜色":
+            dock.setMinimumWidth(280)  # 减小颜色面板的宽度
+            dock.setMinimumHeight(800)  # 大幅增加高度
+        elif title == "图层":
+            dock.setMinimumWidth(200)  # 设置图层面板的宽度
+        else:
+            dock.setMinimumWidth(150)  # 其他面板的最小宽度
+        
         dock.setFeatures(QDockWidget.DockWidgetMovable | QDockWidget.DockWidgetFloatable)
         
         # 设置标题样式
@@ -654,7 +698,7 @@ class MainWindow(QMainWindow):
     def on_shape_selected(self, shape_type, params):
         """图形库中的图形选择处理"""
         # 将图形添加到文档
-        self.shape_library_panel.add_shape_to_document(shape_type, params, self.color_tool)
+        self.shape_library.add_shape_to_document(shape_type, params, self.color_tool)
         self.set_status_message(f"已添加{shape_type}图形")
         
     def set_status_message(self, message):
