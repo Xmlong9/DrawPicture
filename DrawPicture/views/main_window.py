@@ -3,7 +3,7 @@
 
 from PyQt5.QtWidgets import (QMainWindow, QDockWidget, QAction, QFileDialog,
                          QMessageBox, QToolBar, QHBoxLayout, QWidget, QLabel)
-from PyQt5.QtGui import QPainter, QPen, QPixmap, QIcon, QBrush, QColor
+from PyQt5.QtGui import QPainter, QPen, QPixmap, QIcon, QBrush, QColor, QImage
 from PyQt5.QtCore import Qt, QSize, QPoint, QRect
 
 from DrawPicture.models.document import DrawingDocument
@@ -428,6 +428,18 @@ class MainWindow(QMainWindow):
         save_action.triggered.connect(self.on_save)
         file_menu.addAction(save_action)
         
+        save_as_action = QAction("另存为(&A)...", self)
+        save_as_action.setShortcut("Ctrl+Shift+S")
+        save_as_action.triggered.connect(self.on_save_as)
+        file_menu.addAction(save_as_action)
+        
+        file_menu.addSeparator()
+        
+        export_action = QAction("导出图片(&E)...", self)
+        export_action.setShortcut("Ctrl+E")
+        export_action.triggered.connect(self.on_export_image)
+        file_menu.addAction(export_action)
+        
         file_menu.addSeparator()
         
         exit_action = QAction("退出(&Q)", self)
@@ -601,16 +613,164 @@ class MainWindow(QMainWindow):
     def on_save(self):
         """保存文档"""
         if not self.document.file_path:
-            file_path, _ = QFileDialog.getSaveFileName(
-                self, "保存文件", "", "绘图文件 (*.draw);;所有文件 (*)"
+            file_path, filter_type = QFileDialog.getSaveFileName(
+                self, "保存文件", "", 
+                "绘图文件 (*.draw);;PNG图片 (*.png);;JPEG图片 (*.jpg *.jpeg);;BMP图片 (*.bmp);;TIFF图片 (*.tiff);;WebP图片 (*.webp);;SVG图片 (*.svg);;所有文件 (*)"
             )
             if not file_path:
-                return
-            if not file_path.lower().endswith('.draw'):
-                file_path += ".draw"
-            self.document.save(file_path)
+                return False
+                
+            # 根据选择的文件类型处理
+            if "PNG" in filter_type:
+                if not file_path.lower().endswith('.png'):
+                    file_path += ".png"
+                return self.on_export_image(file_path)
+            elif "JPEG" in filter_type:
+                if not file_path.lower().endswith(('.jpg', '.jpeg')):
+                    file_path += ".jpg"
+                return self.on_export_image(file_path)
+            elif "BMP" in filter_type:
+                if not file_path.lower().endswith('.bmp'):
+                    file_path += ".bmp"
+                return self.on_export_image(file_path)
+            elif "TIFF" in filter_type:
+                if not file_path.lower().endswith('.tiff'):
+                    file_path += ".tiff"
+                return self.on_export_image(file_path)
+            elif "WebP" in filter_type:
+                if not file_path.lower().endswith('.webp'):
+                    file_path += ".webp"
+                return self.on_export_image(file_path)
+            elif "SVG" in filter_type:
+                if not file_path.lower().endswith('.svg'):
+                    file_path += ".svg"
+                return self.on_export_image(file_path)
+            else:
+                if not file_path.lower().endswith('.draw'):
+                    file_path += ".draw"
+                self.document.file_path = file_path
+            
+        if self.document.save(self.document.file_path):
+            self.set_status_message(f"文件已保存到: {self.document.file_path}")
+            return True
         else:
-            self.document.save(self.document.file_path) 
+            QMessageBox.warning(self, "保存失败", "无法保存文件。")
+            return False
+
+    def on_save_as(self):
+        """另存为文档"""
+        file_path, filter_type = QFileDialog.getSaveFileName(
+            self, "另存为", "", 
+            "绘图文件 (*.draw);;PNG图片 (*.png);;JPEG图片 (*.jpg *.jpeg);;BMP图片 (*.bmp);;TIFF图片 (*.tiff);;WebP图片 (*.webp);;SVG图片 (*.svg);;所有文件 (*)"
+        )
+        
+        if file_path:
+            # 根据选择的文件类型处理
+            if "PNG" in filter_type:
+                if not file_path.lower().endswith('.png'):
+                    file_path += ".png"
+                return self.on_export_image(file_path)
+            elif "JPEG" in filter_type:
+                if not file_path.lower().endswith(('.jpg', '.jpeg')):
+                    file_path += ".jpg"
+                return self.on_export_image(file_path)
+            elif "BMP" in filter_type:
+                if not file_path.lower().endswith('.bmp'):
+                    file_path += ".bmp"
+                return self.on_export_image(file_path)
+            elif "TIFF" in filter_type:
+                if not file_path.lower().endswith('.tiff'):
+                    file_path += ".tiff"
+                return self.on_export_image(file_path)
+            elif "WebP" in filter_type:
+                if not file_path.lower().endswith('.webp'):
+                    file_path += ".webp"
+                return self.on_export_image(file_path)
+            elif "SVG" in filter_type:
+                if not file_path.lower().endswith('.svg'):
+                    file_path += ".svg"
+                return self.on_export_image(file_path)
+            else:
+                if not file_path.lower().endswith('.draw'):
+                    file_path += ".draw"
+                
+            if self.document.save(file_path):
+                self.document.file_path = file_path
+                self.set_status_message(f"文件已保存到: {file_path}")
+                return True
+            else:
+                QMessageBox.warning(self, "保存失败", "无法保存文件。")
+        return False
+        
+    def on_export_image(self, file_path=None):
+        """导出为图片"""
+        if file_path is None:
+            file_path, filter_type = QFileDialog.getSaveFileName(
+                self, "导出图片", "", 
+                "PNG图片 (*.png);;JPEG图片 (*.jpg *.jpeg);;BMP图片 (*.bmp);;TIFF图片 (*.tiff);;WebP图片 (*.webp);;SVG图片 (*.svg);;ICO图标 (*.ico);;所有文件 (*)"
+            )
+            
+            if file_path:
+                # 设置默认扩展名
+                if "PNG" in filter_type and not file_path.lower().endswith('.png'):
+                    file_path += ".png"
+                elif "JPEG" in filter_type and not file_path.lower().endswith(('.jpg', '.jpeg')):
+                    file_path += ".jpg"
+                elif "BMP" in filter_type and not file_path.lower().endswith('.bmp'):
+                    file_path += ".bmp"
+                elif "TIFF" in filter_type and not file_path.lower().endswith('.tiff'):
+                    file_path += ".tiff"
+                elif "WebP" in filter_type and not file_path.lower().endswith('.webp'):
+                    file_path += ".webp"
+                elif "SVG" in filter_type and not file_path.lower().endswith('.svg'):
+                    file_path += ".svg"
+                elif "ICO" in filter_type and not file_path.lower().endswith('.ico'):
+                    file_path += ".ico"
+        
+        if file_path:
+            try:
+                # 创建高分辨率图像
+                canvas_size = self.canvas.size()
+                scale_factor = 2  # 使用整数倍数
+                width = int(canvas_size.width() * scale_factor)
+                height = int(canvas_size.height() * scale_factor)
+                image = QImage(width, height, QImage.Format_ARGB32)
+                image.fill(QColor(255, 255, 255))
+                
+                # 使用高质量渲染
+                painter = QPainter(image)
+                painter.setRenderHint(QPainter.Antialiasing)
+                painter.setRenderHint(QPainter.SmoothPixmapTransform)
+                painter.setRenderHint(QPainter.TextAntialiasing)
+                
+                # 应用缩放以提高分辨率
+                painter.scale(scale_factor, scale_factor)
+                self.canvas.render(painter)
+                painter.end()
+                
+                # 根据文件类型设置保存选项
+                save_options = {}
+                if file_path.lower().endswith(('.jpg', '.jpeg')):
+                    save_options['quality'] = 95  # JPEG质量设置（0-100）
+                elif file_path.lower().endswith('.png'):
+                    save_options['quality'] = 100  # PNG质量设置（0-100）
+                    save_options['compression'] = 1  # PNG压缩级别（0-9）
+                elif file_path.lower().endswith('.webp'):
+                    save_options['quality'] = 95  # WebP质量设置（0-100）
+                elif file_path.lower().endswith('.tiff'):
+                    save_options['compression'] = 'lzw'  # TIFF压缩方式
+                
+                # 保存图片
+                if image.save(file_path, quality=save_options.get('quality', -1)):
+                    QMessageBox.information(self, "导出成功", 
+                                         f"图片已导出到: {file_path}\n分辨率: {image.width()}x{image.height()}")
+                    self.set_status_message(f"图片已导出到: {file_path}")
+                    return True
+                else:
+                    QMessageBox.warning(self, "导出失败", "无法导出图片。")
+            except Exception as e:
+                QMessageBox.warning(self, "导出失败", f"导出图片时发生错误：{str(e)}")
+        return False
 
     def create_toolbars(self):
         """创建工具栏"""
